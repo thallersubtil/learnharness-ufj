@@ -175,7 +175,7 @@ O texto sai bem do PDF (o plano de Cálculo, por exemplo, extrai limpo com `pypd
 ```
 Biblioteca (novo item na barra lateral)
   └ Matéria (ICE0784 Cálculo I)
-      └ Turma 2026/2 · Prof. Flávio  [Plano de ensino] [Materiais] [Provas antigas]
+      └ Turma 2026/2 · Prof. Exemplo [Plano de ensino] [Materiais] [Provas antigas]
           └ Avaliação N3 · 08/12 · faltam 20 dias      ← tela de PREPARAÇÃO
               ├ Próximos passos (sugeridos)
               ├ Tópicos: Extremos · TVM · Monotonia · Concavidade · Otimização · L'Hôpital · Taylor
@@ -196,7 +196,7 @@ Há dois tipos de dados:
 <LH_DATA_DIR>/biblioteca/
   materias/<CODIGO>/                          # ex.: ICE0784
     materia.json
-    turmas/<semestre>-<docente-slug>/         # ex.: 2026-2-flavio-gomes-de-moraes
+    turmas/<semestre>-<docente-slug>/         # ex.: 2026-2-prof-exemplo
       turma.json
       plano.pdf                               # original importado
       referencias/<nome-original>             # slides, notebooks, listas
@@ -241,7 +241,7 @@ interface Topico {
 // turma.json
 interface Turma {
   formato: 1;
-  id: string;                  // "2026-2-flavio-gomes-de-moraes"
+  id: string;                  // "2026-2-prof-exemplo"
   semestre: string;            // "2026-2"
   docente: { nome: string; slug: string };
   turno?: string; chTeorica?: number; chPratica?: number;
