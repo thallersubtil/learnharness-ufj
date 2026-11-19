@@ -21,6 +21,7 @@ export * from "./ports.ts";
 export * from "./chains.ts";
 export * from "./source-organization.ts";
 export * from "./biblioteca.ts";
+export * from "./biblioteca-escopo.ts";
 export * from "./source-selection.ts";
 export * from "./source-label.ts";
 export * from "./render-settings.ts";
