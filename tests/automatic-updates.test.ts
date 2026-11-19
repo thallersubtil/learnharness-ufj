@@ -13,7 +13,8 @@ const mainFile = fileURLToPath(new URL("../electron/main.cjs", import.meta.url))
 const mainSource = readFileSync(mainFile, "utf8");
 const mainRequire = createRequire(mainFile);
 
-function fixture({ packaged = true, updaterMissing = false } = {}) {
+function fixture({ packaged = true, updaterMissing = false, updatesOn = true } = {}) {
+	let updaterRequires = 0;
 	let settings: string | Error = JSON.stringify({ version: 1, general: { autoUpdate: true } });
 	const settingsReads: string[] = [];
 	const order: string[] = [];
@@ -91,7 +92,11 @@ function fixture({ packaged = true, updaterMissing = false } = {}) {
 			// The actual dev readiness helper is tested separately; keep this
 			// updater shell fixture entirely offline and already ready.
 			if (id === "./dev-server-readiness.cjs") return { waitForDevServer: async () => {} };
+			// Etapa A desliga as atualizações; as suítes do updater rodam com a
+			// política ligada e uma suíte própria cobre o desligado.
+			if (id === "./updates-policy.cjs") return { updatesEnabled: () => updatesOn };
 			if (id === "electron-updater") {
+				updaterRequires++;
 				if (updaterMissing) throw new Error("missing updater");
 				return { autoUpdater: updater };
 			}
@@ -121,8 +126,33 @@ function fixture({ packaged = true, updaterMissing = false } = {}) {
 		state: () => JSON.parse(JSON.stringify(run("updateState"))),
 		check: async (manual = false) => { run(`checkForUpdates({ manual: ${manual} })`); await Promise.resolve(); await Promise.resolve(); },
 		menuCheck: () => menu[0]!.submenu!.find(item => item.label === "Check for Updates…")!.click!(),
+		menuLabels: () => (menu[0]?.submenu ?? []).map(item => item.label).filter(Boolean),
+		updaterRequires: () => updaterRequires,
 	};
 }
+
+describe("atualizações desligadas na Etapa A", () => {
+	it("nunca carrega o electron-updater nem agenda verificações", async () => {
+		const f = fixture({ updatesOn: false }); await f.run("main()");
+		assert.equal(f.updaterRequires(), 0);
+		assert.equal(f.updater.checks, 0);
+		assert.equal(f.intervals.length, 0);
+		assert.equal(f.state().status, "disabled");
+	});
+
+	it("o menu do app não tem o item de atualização", async () => {
+		const f = fixture({ updatesOn: false }); await f.run("main()");
+		assert.ok(!f.menuLabels().includes("Check for Updates…"));
+	});
+
+	it("o IPC lh:update:check responde sem verificar", async () => {
+		const f = fixture({ updatesOn: false }); await f.run("main()");
+		const sender = f.windows[0]!.webContents;
+		f.handles.get("lh:update:check")!({ sender, senderFrame: sender.mainFrame });
+		assert.equal(f.updater.checks, 0);
+		assert.equal(f.updaterRequires(), 0);
+	});
+});
 
 describe("automatic-update preference gate", () => {
 	it("explicit OFF skips automatic checks, but manual checks still run without reading the preference", async () => {

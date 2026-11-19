@@ -43,10 +43,12 @@ const path = require("node:path");
 // renderer owns the number; this is the IPC widen target).
 const SIDEBAR_AUTOCLOSE = 928;
 
-const PRODUCT_NAME = "LearnHarness";
+const PRODUCT_NAME = "LearnHarness UFJ";
+const { updatesEnabled } = require("./updates-policy.cjs");
 
-// APP NAME → userData (owner, 2026-10-10): the Application Support dir is
-// exactly "LearnHarness" in dev AND packaged. Packaged Electron would
+// APP NAME → userData (owner, 2026-10-10; UFJ fork 2026-11-19): the
+// Application Support dir is exactly "LearnHarness UFJ" in dev AND packaged,
+// so this app never shares data with an installed upstream LearnHarness. Packaged Electron would
 // otherwise derive it from package.json "name" (now lowercase
 // "learnharness"), and productName metadata alone doesn't reach app.name.
 // Must run before the LH_DEV_URL suffix below — dev becomes
@@ -536,6 +538,11 @@ function installUpdateNow() {
 }
 
 function setupAutoUpdater() {
+	if (!updatesEnabled()) {
+		log("auto-update: desligado nesta etapa (electron/updates-policy.cjs)");
+		reportUpdateStatus("disabled");
+		return;
+	}
 	if (!app.isPackaged) {
 		log("auto-update: dev build — updater disabled");
 		reportUpdateStatus("disabled");
@@ -620,7 +627,7 @@ function installMenu() {
 			submenu: [
 				{ role: "about" },
 				// Manual checks report their result in Settings → General.
-				{ label: "Check for Updates…", click: () => checkForUpdatesFromMenu() },
+				...(updatesEnabled() ? [{ label: "Check for Updates…", click: () => checkForUpdatesFromMenu() }] : []),
 				{ type: "separator" },
 				{ role: "hide" },
 				{ role: "hideOthers" },
