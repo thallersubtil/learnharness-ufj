@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { BibliotecaHome } from "../components/biblioteca/biblioteca-home.tsx";
-import { PlanoForm } from "../components/biblioteca/plano-form.tsx";
+import { PlanoForm, comIdentidade } from "../components/biblioteca/plano-form.tsx";
 import { PreparacaoTela } from "../components/biblioteca/preparacao-view.tsx";
 import { UfjContextCard } from "../components/ufj-context-card.tsx";
 import { BibliotecaNavButton } from "../components/sidebar.tsx";
@@ -51,6 +51,25 @@ describe("PlanoForm", () => {
 		assert.doesNotMatch(html, /data-escopo="N2:derivadas"[^>]*checked/);
 		assert.match(html, /value="Limites"/);
 		assert.match(html, /1 e 2/);
+	});
+});
+
+describe("identificação editável na importação (revisão final, item 3)", () => {
+	it("comIdentidade recalcula o slug do docente e o id da turma, e normaliza o código", () => {
+		const base = { materia: materiaValida(), turma: turmaValida() };
+		const p = comIdentidade(base, { docente: "Profa. Nova Pessoa" });
+		assert.deepEqual(p.turma.docente, { nome: "Profa. Nova Pessoa", slug: "profa-nova-pessoa" });
+		assert.equal(p.turma.id, "2026-2-profa-nova-pessoa");
+		assert.equal(comIdentidade(base, { semestre: "2027-1" }).turma.id, "2027-1-prof-exemplo");
+		assert.equal(comIdentidade(base, { codigo: " ice0002 " }).materia.codigo, "ICE0002");
+	});
+
+	it("na importação os campos de identificação são editáveis; na edição, não", () => {
+		const props = { materia: materiaValida(), turma: turmaValida(), avisos: [], onChange: noop };
+		const editavel = renderToStaticMarkup(<PlanoForm {...props} identidadeEditavel />);
+		const fixo = renderToStaticMarkup(<PlanoForm {...props} />);
+		assert.doesNotMatch(editavel, /value="ICE0001" readOnly|readonly="" value="ICE0001"|value="ICE0001"[^>]*readonly/i);
+		assert.match(fixo, /value="ICE0001"[^>]*readonly|readonly=""[^>]*value="ICE0001"/i);
 	});
 });
 

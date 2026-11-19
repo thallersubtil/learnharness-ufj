@@ -10,7 +10,7 @@
  */
 
 import { useState } from "react";
-import { TIPOS_AVALIACAO, slugify, type Avaliacao, type Materia, type TipoAvaliacao, type Topico, type Turma } from "@/src/core";
+import { TIPOS_AVALIACAO, slugify, turmaId, type Avaliacao, type Materia, type TipoAvaliacao, type Topico, type Turma } from "@/src/core";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -47,10 +47,23 @@ function idNovo(titulo: string, existentes: readonly Topico[]): string {
 	return id;
 }
 
+/**
+ * Muda a identificação do plano na importação (spec §7.3, passo 4: a revisão
+ * é toda editável). O slug do docente e o id da turma seguem o nome e o
+ * semestre, para a reimportação cair na mesma turma (e pedir para substituir).
+ */
+export function comIdentidade(plano: Plano, patch: { codigo?: string; docente?: string; semestre?: string }): Plano {
+	const materia = patch.codigo === undefined ? plano.materia : { ...plano.materia, codigo: patch.codigo.trim().toUpperCase() };
+	const nome = patch.docente ?? plano.turma.docente.nome;
+	const semestre = (patch.semestre ?? plano.turma.semestre).trim();
+	const slug = slugify(nome);
+	return { materia, turma: { ...plano.turma, semestre, docente: { nome, slug }, id: turmaId(semestre, slug) } };
+}
+
 const linhas = (texto: string) => texto.split("\n").map((l) => l.trim()).filter(Boolean);
 const numeroOuNada = (v: string) => (v.trim() === "" || !Number.isFinite(Number(v)) ? undefined : Number(v));
 
-export function PlanoForm({ materia, turma, avisos, onChange }: Plano & { avisos: string[]; onChange: (next: Plano) => void }) {
+export function PlanoForm({ materia, turma, avisos, onChange, identidadeEditavel = false }: Plano & { avisos: string[]; onChange: (next: Plano) => void; identidadeEditavel?: boolean }) {
 	const [novoTopico, setNovoTopico] = useState("");
 	const ativos = materia.topicos.filter((t) => !t.arquivado);
 	const arquivados = materia.topicos.filter((t) => t.arquivado);
@@ -78,11 +91,11 @@ export function PlanoForm({ materia, turma, avisos, onChange }: Plano & { avisos
 			<Secao titulo="Identificação">
 				<div className="grid gap-3 sm:grid-cols-2">
 					<label className="text-xs text-muted-foreground">Disciplina<Input value={materia.nome} onChange={(e) => setMateria({ nome: e.target.value })} /></label>
-					<label className="text-xs text-muted-foreground">Código<Input value={materia.codigo} readOnly /></label>
+					<label className="text-xs text-muted-foreground">Código<Input value={materia.codigo} readOnly={!identidadeEditavel} onChange={(e) => onChange(comIdentidade({ materia, turma }, { codigo: e.target.value }))} /></label>
 					<label className="text-xs text-muted-foreground">Curso<Input value={materia.curso} onChange={(e) => setMateria({ curso: e.target.value })} /></label>
 					<label className="text-xs text-muted-foreground">Unidade<Input value={materia.unidade} onChange={(e) => setMateria({ unidade: e.target.value })} /></label>
-					<label className="text-xs text-muted-foreground">Docente<Input value={turma.docente.nome} readOnly /></label>
-					<label className="text-xs text-muted-foreground">Semestre<Input value={turma.semestre} readOnly /></label>
+					<label className="text-xs text-muted-foreground">Docente<Input value={turma.docente.nome} readOnly={!identidadeEditavel} onChange={(e) => onChange(comIdentidade({ materia, turma }, { docente: e.target.value }))} /></label>
+					<label className="text-xs text-muted-foreground">Semestre (AAAA-N)<Input value={turma.semestre} readOnly={!identidadeEditavel} onChange={(e) => onChange(comIdentidade({ materia, turma }, { semestre: e.target.value }))} /></label>
 				</div>
 			</Secao>
 
