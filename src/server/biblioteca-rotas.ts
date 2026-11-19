@@ -10,6 +10,7 @@ import { BibliotecaConflitoError, BibliotecaEntradaError, BibliotecaFormatoError
 import { ModelsNotConfiguredError, ProviderKeyMissingError } from "../core/settings.ts";
 import { bibliotecaIa, type BibliotecaIa } from "./biblioteca-ia.ts";
 import { BibliotecaEnvioGrandeError, bibliotecaService, type BibliotecaService } from "./biblioteca.ts";
+import { preparacaoView, salvarHoras } from "./preparacao.ts";
 
 const PDF_MAGIC = "%PDF-";
 
@@ -158,6 +159,33 @@ export async function materiaisPutRoute(request: Request, codigo: string, turmaI
 	if (body instanceof Response) return body;
 	try {
 		return Response.json(svc.salvarReferencias(codigo, turmaId, body));
+	} catch (err) {
+		return respostaDeErro(err);
+	}
+}
+
+// ─── preparação (tarefa 9) ───────────────────────────────────────────────────
+
+/** GET /api/biblioteca/preparacao?materia=&turma=&avaliacao= */
+export async function preparacaoGetRoute(request: Request): Promise<Response> {
+	const q = new URL(request.url).searchParams;
+	const materia = q.get("materia");
+	const turma = q.get("turma");
+	const avaliacao = q.get("avaliacao");
+	if (!materia || !turma || !avaliacao) return Response.json({ error: "Informe matéria, turma e avaliação." }, { status: 400 });
+	try {
+		return Response.json(preparacaoView({ materia, turma, avaliacao }, new Date()));
+	} catch (err) {
+		return respostaDeErro(err);
+	}
+}
+
+/** PUT /api/biblioteca/preparacao — `{materia, turma, avaliacao, horas: number | null}` */
+export async function preparacaoPutRoute(request: Request): Promise<Response> {
+	const body = await lerJson(request);
+	if (body instanceof Response) return body;
+	try {
+		return Response.json(salvarHoras(body));
 	} catch (err) {
 		return respostaDeErro(err);
 	}

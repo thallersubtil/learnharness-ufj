@@ -17,7 +17,8 @@ import {
 } from "../core/biblioteca.ts";
 import type { UfjContextRef } from "../core/contracts.ts";
 import { newUfjContextMessage, type GraphContextPick, type LhMarkerMessage } from "../core/native-messages.ts";
-import { composeUfjContextText, type UfjContextPayload } from "../core/ufj-context.ts";
+import { composeUfjContextText, promptAprender, promptPraticar, type UfjContextPayload } from "../core/ufj-context.ts";
+import { diasAte, proximosPassos, sinaisPorTopico, type PreparacaoView, type TopicoPreparacao } from "../core/preparacao.ts";
 import type { BibliotecaStore, EstudoStore } from "../core/ports.ts";
 import type { ChatSummary, GraphNode } from "../core/contracts.ts";
 import { GRAPH_CONTEXT_PICK_LIMIT } from "./graph-context.ts";
@@ -28,7 +29,7 @@ export interface PreparacaoDeps {
 	estudo: EstudoStore;
 	listChats: () => ChatSummary[];
 	readNodes: () => GraphNode[];
-	/** Dias até a data (AAAA-MM-DD); ligado na tarefa 9. */
+	/** Dias até a data (AAAA-MM-DD), pela data local de hoje. */
 	diasAte?: (data: string) => number;
 }
 
@@ -37,6 +38,7 @@ const defaultDeps = (): PreparacaoDeps => ({
 	estudo: stores.estudoStore,
 	listChats: () => stores.chatStore.listChats(),
 	readNodes: () => stores.graphStore.readNodes(),
+	diasAte: (data) => diasAte(data, new Date()),
 });
 
 const DESCONHECIDO = "Matéria, turma, avaliação ou tópico desconhecido.";
@@ -106,4 +108,71 @@ export function practicePicksForTopico(ref: UfjContextRef, deps: PreparacaoDeps 
 		.sort((a, b) => a.createdAt.localeCompare(b.createdAt))
 		.slice(0, GRAPH_CONTEXT_PICK_LIMIT)
 		.map((n) => ({ id: n.id, name: n.name, statement: n.statement }));
+}
+
+const SEM_ESCOPO = "Esta avaliação está sem escopo. Edite o plano para escolher os tópicos.";
+
+/** A view da tela de preparação de uma avaliação (spec §7.5). */
+export function preparacaoView(ref: { materia: string; turma: string; avaliacao: string }, hoje: Date, deps: PreparacaoDeps = defaultDeps()): PreparacaoView {
+	let materia: Materia | null;
+	let turma: Turma | null;
+	try {
+		materia = deps.biblioteca.readMateria(ref.materia);
+		turma = materia ? deps.biblioteca.readTurma(ref.materia, ref.turma) : null;
+	} catch {
+		throw new BibliotecaEntradaError("Matéria, turma ou avaliação desconhecida.");
+	}
+	const avaliacao = turma?.avaliacoes.find((a) => a.id === ref.avaliacao);
+	if (!materia || !turma || !avaliacao) throw new BibliotecaEntradaError("Matéria, turma ou avaliação desconhecida.");
+	const sinais = sinaisPorTopico(deps.listChats(), { materia: materia.codigo });
+	const refs = deps.biblioteca.readReferencias(materia.codigo, turma.id).arquivos;
+	const primeiraAula = (id: string) => Math.min(...turma.aulas.filter((a) => a.topicos.includes(id)).map((a) => a.ordem), Number.POSITIVE_INFINITY);
+	const ativos = avaliacao.escopo.topicos
+		.map((id, i) => ({ topico: materia.topicos.find((t) => t.id === id && !t.arquivado), i }))
+		.filter((x): x is { topico: NonNullable<typeof x.topico>; i: number } => x.topico !== undefined)
+		.sort((a, b) => primeiraAula(a.topico.id) - primeiraAula(b.topico.id) || a.i - b.i);
+	const topicos: TopicoPreparacao[] = ativos.map(({ topico }) => {
+		const s = sinais.get(topico.id);
+		const payload: UfjContextPayload = {
+			materia: materia.codigo, turma: turma.id, avaliacao: avaliacao.id, topico: topico.id,
+			materiaNome: materia.nome, docente: turma.docente.nome, avaliacaoNome: avaliacao.nome,
+			...(avaliacao.data ? { data: avaliacao.data } : {}), topicoTitulo: topico.titulo,
+		};
+		return {
+			id: topico.id,
+			titulo: topico.titulo,
+			aulas: turma.aulas.filter((a) => a.topicos.includes(topico.id)).sort((x, y) => x.ordem - y.ordem).map((a) => ({ rotulo: a.rotulo, ...(a.data ? { data: a.data } : {}) })),
+			referencias: refs.filter((r) => r.topicos.includes(topico.id)).length,
+			aulaFeita: s?.aulaFeita ?? false,
+			praticado: s?.praticado ?? false,
+			sessoes: s?.sessoes ?? [],
+			ufjContext: { materia: materia.codigo, turma: turma.id, avaliacao: avaliacao.id, topico: topico.id },
+			promptAprender: topico.prompt?.trim() || promptAprender(payload),
+			promptPraticar: promptPraticar(payload),
+		};
+	});
+	return {
+		materia: { codigo: materia.codigo, nome: materia.nome },
+		turma: { id: turma.id, semestre: turma.semestre, docente: turma.docente.nome },
+		avaliacao,
+		dias: avaliacao.data ? diasAte(avaliacao.data, hoje) : null,
+		horas: deps.estudo.readHoras(chaveHoras(ref)),
+		criteriosMedia: turma.criteriosMedia,
+		topicos,
+		passos: proximosPassos(topicos),
+		avisos: topicos.length === 0 ? [SEM_ESCOPO] : [],
+	};
+}
+
+/** Grava (ou apaga, com null) as horas disponíveis para uma avaliação. */
+export function salvarHoras(raw: unknown, deps: PreparacaoDeps = defaultDeps()): { horas: number | null } {
+	const r = raw as { materia?: unknown; turma?: unknown; avaliacao?: unknown; horas?: unknown } | null;
+	const horas = r?.horas;
+	if (horas !== null && (typeof horas !== "number" || !Number.isFinite(horas) || horas <= 0 || horas > 200)) {
+		throw new BibliotecaEntradaError("Informe um número de horas entre 0 e 200.");
+	}
+	if (typeof r?.materia !== "string" || typeof r.turma !== "string" || typeof r.avaliacao !== "string") throw new BibliotecaEntradaError("Matéria, turma ou avaliação desconhecida.");
+	preparacaoView({ materia: r.materia, turma: r.turma, avaliacao: r.avaliacao }, new Date(), deps); // valida os ids
+	deps.estudo.writeHoras(chaveHoras({ materia: r.materia, turma: r.turma, avaliacao: r.avaliacao }), horas);
+	return { horas };
 }

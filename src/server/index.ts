@@ -34,7 +34,7 @@ export { createBibliotecaIa, bibliotecaIa, resolveBibliotecaEngine, type Bibliot
 export * from "./biblioteca-rotas.ts";
 export { createBibliotecaService, bibliotecaService, type BibliotecaService, type BibliotecaListagem } from "./biblioteca.ts";
 export { graphContextMessageFor, sanitizeGraphPicks, GRAPH_CONTEXT_PICK_LIMIT } from "./graph-context.ts";
-export { chaveHoras, parseUfjContextRef, practicePicksForTopico, resolveUfjRef, ufjMarkerFor, type PreparacaoDeps } from "./preparacao.ts";
+export { chaveHoras, parseUfjContextRef, practicePicksForTopico, preparacaoView, resolveUfjRef, salvarHoras, ufjMarkerFor, type PreparacaoDeps } from "./preparacao.ts";
 export { readThemeBoot, type ThemeBoot } from "./theme-boot.ts";
 export { isValidSegmentPath } from "../core/prompt-segments.ts";
 // The canonical segment discovery/resolution lives in the agent layer
