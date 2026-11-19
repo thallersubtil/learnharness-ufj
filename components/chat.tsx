@@ -94,13 +94,14 @@ import { PluginProblemSubmitted } from "./plugin-problem-submitted";
 import { readPluginProblemSubmission, pluginProblemById } from "@/src/core";
 import { ThinkingCard, ProblemCard, type PracticeThinkingData } from "@/components/practice-cards";
 import { GraphContextCard, type GraphContextData } from "@/components/graph-context-card";
+import { UfjContextCard } from "@/components/ufj-context-card";
 import { TopBar } from "@/components/top-bar";
 import { PluginSessionTopBarActions } from "@/components/plugin-chrome";
 import { usePluginShortcutPage } from "@/components/plugin-shortcuts";
 import { createPluginSessionActionContext, type PluginSessionViewInput } from "@/src/core";
 import type { SessionInputViewReader, SessionViewTargets, NativeQuestionViewState, ViewReaderRef } from "./session-view-readers";
 import type { JobRecord, Phase3, QuestionAnswerData, QuestionFormDraft, TurnUsage, SessionPricing } from "@/src/core";
-import type { LhViewMessage } from "@/src/core";
+import type { LhViewMessage, UfjContextPayload } from "@/src/core";
 import { PhaseChip, PhaseDivider } from "@/components/phase-divider";
 import {
 	CompactionCutDivider,
@@ -1786,6 +1787,8 @@ export function Chat({
 										switch (part.type) {
 											case "data-graph-context":
 												return <GraphContextCard key={pi} data={part.data as GraphContextData} />;
+											case "data-ufj-context":
+												return <UfjContextCard key={pi} data={part.data as UfjContextPayload} />;
 											case "data-compaction":
 												return <CompactionMomentDivider key={pi} data={part.data as CompactionDividerData} />;
 											case "data-compaction-cut":
