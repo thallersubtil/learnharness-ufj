@@ -51,6 +51,7 @@ export interface ServerEvents {
     "activity-changed": Record<string, never>;
     "chats-changed": Record<string, never>;
     "sources-changed": Record<string, never>;
+    "biblioteca-changed": Record<string, never>;
     "subscriptions-changed": Record<string, never>;
     "record-changed": {
         chatId: string;
@@ -82,6 +83,7 @@ export interface ServerEvents {
 - ["activity-changed"](#serverevents-activity-changed)
 - ["chats-changed"](#serverevents-chats-changed)
 - ["sources-changed"](#serverevents-sources-changed)
+- ["biblioteca-changed"](#serverevents-biblioteca-changed)
 - ["subscriptions-changed"](#serverevents-subscriptions-changed)
 - ["record-changed"](#serverevents-record-changed)
 - ["record-changed".chatId](#serverevents-record-changedchatid)
@@ -169,6 +171,14 @@ Source inventory, display names, or organizational folders changed.
 
 ```ts
 "sources-changed": Record<string, never>;
+```
+
+### ServerEvents "biblioteca-changed"
+
+A biblioteca UFJ mudou (matéria, turma ou materiais gravados).
+
+```ts
+"biblioteca-changed": Record<string, never>;
 ```
 
 ### ServerEvents "subscriptions-changed"

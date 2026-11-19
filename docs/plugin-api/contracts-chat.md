@@ -17,6 +17,7 @@
 - [SideChatMessage](#sidechatmessage) — supporting declaration
 - [SideChatThread](#sidechatthread) — supporting declaration
 - [TurnUsage](#turnusage) — supporting declaration
+- [UfjContextRef](#ufjcontextref) — supporting declaration
 
 ## CallUsage
 
@@ -366,11 +367,13 @@ export interface ChatSummary {
     phase: Phase3;
     pendingQuestion: boolean;
     pendingProblem: boolean;
+    concludedProblems: number;
+    ufj?: UfjContextRef;
     settings?: ChatSettings;
 }
 ```
 
-**Related types:** [ChatKind](contracts-chat.md#chatkind), [ChatSettings](contracts-chat.md#chatsettings), [Phase3](phases.md#phase3).
+**Related types:** [ChatKind](contracts-chat.md#chatkind), [ChatSettings](contracts-chat.md#chatsettings), [Phase3](phases.md#phase3), [UfjContextRef](contracts-chat.md#ufjcontextref).
 
 **Member index** (including nested object members; inherited members are defined in the linked base types):
 
@@ -383,6 +386,8 @@ export interface ChatSummary {
 - [phase](#chatsummary-phase)
 - [pendingQuestion](#chatsummary-pendingquestion)
 - [pendingProblem](#chatsummary-pendingproblem)
+- [concludedProblems](#chatsummary-concludedproblems)
+- [ufj](#chatsummary-ufj)
 - [settings](#chatsummary-settings)
 
 ### ChatSummary id
@@ -446,6 +451,22 @@ A practice problem is posed but not concluded. False on teaching sessions.
 
 ```ts
 pendingProblem: boolean;
+```
+
+### ChatSummary concludedProblems
+
+Practice problems concluded cleanly (dismissals excluded). 0 on teaching sessions.
+
+```ts
+concludedProblems: number;
+```
+
+### ChatSummary ufj
+
+The UFJ library link, when the session was created from a topic.
+
+```ts
+ufj?: UfjContextRef;
 ```
 
 ### ChatSummary settings
@@ -943,4 +964,51 @@ One entry per agent step (model call) in this turn.
 
 ```ts
 steps: CallUsage[];
+```
+
+## UfjContextRef
+
+Supporting declaration used by a public type. This is not an additional runtime API or SDK helper.
+
+A session's link to the UFJ library (the ufj-context marker's ids):
+which subject, class, assessment and topic the session studies.
+
+```ts
+export interface UfjContextRef {
+    materia: string;
+    turma: string;
+    avaliacao: string;
+    topico?: string;
+}
+```
+
+**Member index** (including nested object members; inherited members are defined in the linked base types):
+
+- [materia](#ufjcontextref-materia)
+- [turma](#ufjcontextref-turma)
+- [avaliacao](#ufjcontextref-avaliacao)
+- [topico](#ufjcontextref-topico)
+
+### UfjContextRef materia
+
+```ts
+materia: string;
+```
+
+### UfjContextRef turma
+
+```ts
+turma: string;
+```
+
+### UfjContextRef avaliacao
+
+```ts
+avaliacao: string;
+```
+
+### UfjContextRef topico
+
+```ts
+topico?: string;
 ```

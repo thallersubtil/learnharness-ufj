@@ -289,6 +289,15 @@ export interface PlanBlockData {
 	edges: Array<{ from: string; to: string }>;
 }
 
+/** A session's link to the UFJ library (the ufj-context marker's ids):
+ * which subject, class, assessment and topic the session studies. */
+export interface UfjContextRef {
+	materia: string;
+	turma: string;
+	avaliacao: string;
+	topico?: string;
+}
+
 /** Saved-session summary with a message count instead of full history.
  * Phase and pending-input flags derive from native transcript events.
  * Live turn/compaction state is added separately in ChatListItem, not
@@ -308,6 +317,10 @@ export interface ChatSummary {
 	pendingQuestion: boolean;
 	/** A practice problem is posed but not concluded. False on teaching sessions. */
 	pendingProblem: boolean;
+	/** Practice problems concluded cleanly (dismissals excluded). 0 on teaching sessions. */
+	concludedProblems: number;
+	/** The UFJ library link, when the session was created from a topic. */
+	ufj?: UfjContextRef;
 	/** Saved per-session model/thinking choices included in the list payload. */
 	settings?: ChatSettings;
 }

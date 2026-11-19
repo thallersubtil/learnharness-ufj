@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { MenuShell } from "@/components/menu-shell";
 import { DeleteSessionDialog } from "@/components/delete-session-dialog";
 import type { ChatDeleteMode, ThemeMode } from "@/src/core";
-import { DumbbellIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PlusIcon, SearchIcon, SettingsIcon } from "lucide-react";
+import { DumbbellIcon, LibraryIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PlusIcon, SearchIcon, SettingsIcon } from "lucide-react";
 import { ActivitySection } from "@/components/activity-dock";
 import { CoverageMenuBlock } from "@/components/extraction-coverage";
 import { LhMark } from "@/components/lh-mark";
@@ -722,6 +722,7 @@ function SessionsSidebar() {
 						<span className="min-w-0 truncate">Practice</span>
 						<span className="sr-only">create a new practice session</span>
 					</button>
+					<BibliotecaNavButton active={pathname.startsWith("/biblioteca")} onClick={() => router.push("/biblioteca")} />
 				</PluginSidebarActions>
 
 				<div className="mx-3 mb-2 flex items-center gap-2">
@@ -967,5 +968,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 			</SettingsDialogProvider></InteractionLayersProvider>
 		</HostContentRootContext.Provider>
 		</HostRouteLifetimeProvider>
+	);
+}
+
+/** UFJ (spec Etapa A §7.1): the library door, beside Teaching and Practice. */
+export function BibliotecaNavButton({ active, onClick }: { active: boolean; onClick: () => void }) {
+	return (
+		<button
+			type="button"
+			data-testid="nav-biblioteca"
+			title="Biblioteca"
+			aria-current={active ? "page" : undefined}
+			onClick={onClick}
+			className={`flex min-w-0 w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-xs uppercase tracking-wider transition-colors hover:bg-accent hover:text-foreground ${active ? "bg-accent text-foreground" : "text-muted-foreground"}`}
+		>
+			<LibraryIcon className="size-3 shrink-0" />
+			<span className="min-w-0 truncate">Biblioteca</span>
+			<span className="sr-only">abrir a biblioteca UFJ</span>
+		</button>
 	);
 }
