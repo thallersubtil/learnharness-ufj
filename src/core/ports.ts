@@ -29,10 +29,12 @@ import type {
 	SessionCheckpoint,
 	SideChatThread,
 	TurnUsage,
+	CallUsage,
 	NotesSource,
 } from "./contracts.ts";
 import type { UserSettings } from "./settings.ts";
 import type { Theme, ThemeFile } from "./themes.ts";
+import type { Materia, Referencias, Turma } from "./biblioteca.ts";
 
 // ─── Plugin sessions — plugin-owned data, separate from core chats ──────────
 
@@ -283,3 +285,44 @@ export interface AuthStore {
 	deleteAuthVar(name: string): void;
 }
 
+// ─── BibliotecaStore / EstudoStore — biblioteca UFJ (spec Etapa A §7.2) ─────
+
+/**
+ * A biblioteca UFJ como arquivos sob config.BIBLIOTECA_DIR. Todo id é
+ * validado antes de virar caminho; ler um arquivo de formato mais novo lança
+ * BibliotecaFormatoError (nunca é tratado como ausente); toda escrita é
+ * atômica e emite `biblioteca-changed`.
+ */
+export interface BibliotecaStore {
+	/** Matérias válidas; os problemas de leitura vêm em texto, sem lançar. */
+	listMaterias(): { materias: Materia[]; problemas: string[] };
+	readMateria(codigo: string): Materia | null;
+	writeMateria(m: Materia): void;
+	listTurmas(codigo: string): Turma[];
+	readTurma(codigo: string, turmaId: string): Turma | null;
+	writeTurma(codigo: string, t: Turma, planoPdf?: Uint8Array): void;
+	/** `{formato: 1, arquivos: []}` quando o arquivo não existe. */
+	readReferencias(codigo: string, turmaId: string): Referencias;
+	writeReferencias(codigo: string, turmaId: string, r: Referencias): void;
+	/** Copia um material para a turma sem duplicar conteúdo (SHA-256). */
+	addReferenciaFile(codigo: string, turmaId: string, nome: string, bytes: Uint8Array): { arquivo: string; sha256: string; reutilizado: boolean };
+	referenciaPath(codigo: string, turmaId: string, arquivo: string): string;
+	/** SHA-256 do material guardado, ou null se ele não existe. */
+	referenciaSha256(codigo: string, turmaId: string, arquivo: string): string | null;
+	planoPdfPath(codigo: string, turmaId: string): string | null;
+}
+
+/** Uma chamada de modelo feita pela biblioteca, para o custo. */
+export interface UsoBiblioteca {
+	em: string;
+	operacao: "rascunho-plano" | "sugerir-materiais";
+	model: string;
+	usage: CallUsage;
+}
+
+/** O estudo pessoal (config.ESTUDO_DIR): fica fora da biblioteca compartilhada. */
+export interface EstudoStore {
+	readHoras(chave: string): number | null;
+	writeHoras(chave: string, horas: number | null): void;
+	appendUso(entrada: UsoBiblioteca): void;
+}
