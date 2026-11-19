@@ -307,6 +307,8 @@ export interface BibliotecaStore {
 	/** Copia um material para a turma sem duplicar conteúdo (SHA-256). */
 	addReferenciaFile(codigo: string, turmaId: string, nome: string, bytes: Uint8Array): { arquivo: string; sha256: string; reutilizado: boolean };
 	referenciaPath(codigo: string, turmaId: string, arquivo: string): string;
+	/** Todos os materiais guardados na turma (mapeados ou não), em ordem alfabética. */
+	listReferenciaFiles(codigo: string, turmaId: string): string[];
 	/** SHA-256 do material guardado, ou null se ele não existe. */
 	referenciaSha256(codigo: string, turmaId: string, arquivo: string): string | null;
 	planoPdfPath(codigo: string, turmaId: string): string | null;

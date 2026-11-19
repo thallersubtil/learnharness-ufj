@@ -214,6 +214,14 @@ export const bibliotecaStore: BibliotecaStore = {
 		return path.join(/* turbopackIgnore: true */ referenciasDir(codigo, turmaId), checkNome(arquivo));
 	},
 
+	listReferenciaFiles(codigo, turmaId) {
+		try {
+			return fs.readdirSync(referenciasDir(codigo, turmaId)).filter((n) => !n.includes(".tmp-") && isValidNomeArquivo(n)).sort();
+		} catch {
+			return [];
+		}
+	},
+
 	referenciaSha256(codigo, turmaId, arquivo) {
 		try {
 			return sha256(fs.readFileSync(this.referenciaPath(codigo, turmaId, arquivo)));

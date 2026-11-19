@@ -9,7 +9,7 @@ import { MAX_IMPORT_BODY_BYTES } from "../../lib/notes-import-limits.ts";
 import { BibliotecaConflitoError, BibliotecaEntradaError, BibliotecaFormatoError, BibliotecaNaoEncontradaError } from "../core/biblioteca.ts";
 import { ModelsNotConfiguredError, ProviderKeyMissingError } from "../core/settings.ts";
 import { bibliotecaIa, type BibliotecaIa } from "./biblioteca-ia.ts";
-import { bibliotecaService, type BibliotecaService } from "./biblioteca.ts";
+import { BibliotecaEnvioGrandeError, bibliotecaService, type BibliotecaService } from "./biblioteca.ts";
 
 const PDF_MAGIC = "%PDF-";
 
@@ -17,6 +17,7 @@ const PDF_MAGIC = "%PDF-";
 export function respostaDeErro(err: unknown): Response {
 	if (err instanceof BibliotecaEntradaError) return Response.json({ error: err.message }, { status: 400 });
 	if (err instanceof BibliotecaNaoEncontradaError) return Response.json({ error: err.message }, { status: 404 });
+	if (err instanceof BibliotecaEnvioGrandeError) return Response.json({ error: err.message }, { status: 413 });
 	if (err instanceof BibliotecaConflitoError) return Response.json({ error: err.message, code: err.code }, { status: 409 });
 	if (err instanceof BibliotecaFormatoError) return Response.json({ error: err.message, code: "formato_mais_novo" }, { status: 409 });
 	if (err instanceof ModelsNotConfiguredError) return Response.json(err.envelope, { status: 503 });
@@ -131,6 +132,32 @@ export async function turmaPutRoute(request: Request, codigo: string, turmaId: s
 	if (body instanceof Response) return body;
 	try {
 		return Response.json(svc.salvarTurma(codigo, turmaId, body));
+	} catch (err) {
+		return respostaDeErro(err);
+	}
+}
+
+// ─── materiais da turma (tarefa 7) ───────────────────────────────────────────
+
+/** POST .../materiais — multipart `arquivos` (vários): copia e devolve sugestões (sem gravar o mapeamento). */
+export async function materiaisPostRoute(request: Request, codigo: string, turmaId: string, svc: BibliotecaService = bibliotecaService): Promise<Response> {
+	const form = await lerFormulario(request);
+	if (form instanceof Response) return form;
+	const files = form.getAll("arquivos").filter((f): f is File => f instanceof File);
+	try {
+		const arquivos = await Promise.all(files.map(async (f) => ({ nome: f.name, bytes: new Uint8Array(await f.arrayBuffer()) })));
+		return Response.json(await svc.adicionarMateriais(codigo, turmaId, arquivos, request.signal));
+	} catch (err) {
+		return respostaDeErro(err);
+	}
+}
+
+/** PUT .../materiais — JSON `{ arquivos: [{arquivo, titulo?, topicos}] }`: grava o mapeamento revisado. */
+export async function materiaisPutRoute(request: Request, codigo: string, turmaId: string, svc: BibliotecaService = bibliotecaService): Promise<Response> {
+	const body = await lerJson(request);
+	if (body instanceof Response) return body;
+	try {
+		return Response.json(svc.salvarReferencias(codigo, turmaId, body));
 	} catch (err) {
 		return respostaDeErro(err);
 	}

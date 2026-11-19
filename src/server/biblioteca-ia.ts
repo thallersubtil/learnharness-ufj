@@ -126,6 +126,48 @@ const PlanoSchema = Type.Object({
 	),
 });
 
+const SugestoesSchema = Type.Object({
+	sugestoes: Type.Array(
+		Type.Object({
+			arquivo: texto("Nome do arquivo, exatamente como recebido."),
+			topicos: listaDeTextos("Ids dos tópicos a que o arquivo pertence; vazio se não der para decidir."),
+		}),
+		{ description: "Uma entrada para cada arquivo recebido." },
+	),
+});
+
+/** Extensões aceitas como material de turma (spec Etapa A §7.4). */
+export const EXTENSOES_MATERIAIS = [".pdf", ".ipynb", ".md", ".txt", ".c", ".h", ".py", ".java", ".png", ".jpg", ".jpeg"] as const;
+
+const LIMITE_TRECHO = 2000;
+
+/** O trecho do início de um material, para a sugestão de tópicos. */
+export async function trechoDoArquivo(nome: string, bytes: Uint8Array, convert: typeof convertPdf = convertPdf): Promise<string> {
+	const ext = nome.slice(nome.lastIndexOf(".")).toLowerCase();
+	if (ext === ".png" || ext === ".jpg" || ext === ".jpeg") return "";
+	if (ext === ".pdf") {
+		try {
+			const c = await convert(bytes, 1000);
+			return c.kind === "converted" ? joinPages(c.pages.slice(0, 2)).slice(0, LIMITE_TRECHO * 2) : "";
+		} catch {
+			return "";
+		}
+	}
+	const textoBruto = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+	if (ext === ".ipynb") {
+		try {
+			const nb = JSON.parse(textoBruto) as { cells?: { cell_type?: string; source?: string | string[] }[] };
+			const partes = (nb.cells ?? [])
+				.filter((c) => c.cell_type === "markdown" || c.cell_type === "code")
+				.map((c) => (Array.isArray(c.source) ? c.source.join("") : (c.source ?? "")));
+			return partes.join("\n\n").slice(0, LIMITE_TRECHO);
+		} catch {
+			return textoBruto.slice(0, LIMITE_TRECHO);
+		}
+	}
+	return textoBruto.slice(0, LIMITE_TRECHO);
+}
+
 interface PlanoEnviado {
 	materia: { codigo: string; nome: string; curso: string; unidade: string; ementa: string; objetivos: { geral: string[]; especificos: string[] }; bibliografia: { basica: string[]; complementar: string[]; virtual: string[] } };
 	turma: { semestre: string; docente: string; turno?: string; chTeorica?: number; chPratica?: number; criteriosMedia: string; recuperacao?: string; metodologia?: string };
@@ -313,8 +355,53 @@ export function createBibliotecaIa(deps: BibliotecaIaDeps): BibliotecaIa {
 		};
 	}
 
-	async function sugerirTopicosDosMateriais(): Promise<SugestoesMateriais> {
-		throw new Error("sugerirTopicosDosMateriais: implementado na tarefa 7");
+	async function sugerirTopicosDosMateriais(codigo: string, turmaIdAlvo: string, arquivos: { arquivo: string; trecho: string }[], signal?: AbortSignal): Promise<SugestoesMateriais> {
+		if (arquivos.length === 0) return { sugestoes: [], custoUsd: null };
+		const materia = deps.biblioteca.readMateria(codigo);
+		const turma = deps.biblioteca.readTurma(codigo, turmaIdAlvo);
+		if (!materia || !turma) throw new BibliotecaEntradaError("Turma não encontrada.");
+		const ativos = materia.topicos.filter((t) => !t.arquivado);
+		const ids = new Set(ativos.map((t) => t.id));
+		const nomes = new Set(arquivos.map((a) => a.arquivo));
+		const listaTopicos = ativos
+			.map((t) => {
+				const conteudos = turma.aulas.filter((a) => a.topicos.includes(t.id)).map((a) => a.conteudo);
+				return `- ${t.id}: ${t.titulo}${conteudos.length ? ` — aulas: ${conteudos.join("; ")}` : ""}`;
+			})
+			.join("\n");
+		const blocos = arquivos.map((a) => `### ${a.arquivo}\n${a.trecho || "(sem texto)"}`).join("\n\n");
+		const engine = await deps.engineFor();
+		const uso = medidor(deps, "sugerir-materiais");
+		let enviado: { sugestoes: { arquivo: string; topicos: string[] }[] };
+		let custoUsd: number | null = null;
+		try {
+			enviado = await runSubmitAgent({
+				role: "biblioteca",
+				toolName: "sugerir_topicos",
+				toolDescription: "Envia, para cada arquivo recebido, os ids dos tópicos a que ele pertence.",
+				parameters: SugestoesSchema,
+				fill: (input) => input as { sugestoes: { arquivo: string; topicos: string[] }[] },
+				systemPrompt: MATERIAIS_SYSTEM_PROMPT,
+				prompt: `Tópicos do plano de ensino:\n${listaTopicos || "(nenhum)"}\n\nArquivos:\n\n${blocos}`,
+				engine,
+				signal,
+				onStep: uso.onStep,
+				neverSubmitted: "O modelo não devolveu as sugestões de tópicos.",
+				validate: (v) => {
+					const erros: string[] = [];
+					for (const s of v.sugestoes) {
+						if (!nomes.has(s.arquivo)) erros.push(`O arquivo "${s.arquivo}" não está entre os recebidos.`);
+						for (const id of s.topicos) if (!ids.has(id)) erros.push(`O tópico "${id}" (em "${s.arquivo}") não está na lista de tópicos.`);
+					}
+					return erros.length ? `Corrija e envie de novo:\n- ${erros.join("\n- ")}` : null;
+				},
+			});
+		} finally {
+			custoUsd = uso.fechar();
+		}
+		// Uma entrada por arquivo, na ordem recebida; o que o modelo omitiu fica sem tópico.
+		const porArquivo = new Map(enviado.sugestoes.map((s) => [s.arquivo, [...new Set(s.topicos)]]));
+		return { sugestoes: arquivos.map((a) => ({ arquivo: a.arquivo, topicos: porArquivo.get(a.arquivo) ?? [] })), custoUsd };
 	}
 
 	return { rascunhoDoPlano, sugerirTopicosDosMateriais };

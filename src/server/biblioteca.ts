@@ -17,12 +17,24 @@ import {
 } from "../core/biblioteca.ts";
 import { arquivarRemovidos, topicosReferenciados } from "../core/biblioteca-escopo.ts";
 import type { BibliotecaStore } from "../core/ports.ts";
+import { MAX_IMPORT_BYTES } from "../../lib/notes-import-limits.ts";
 import { stores } from "./stores.ts";
+import { EXTENSOES_MATERIAIS, bibliotecaIa, trechoDoArquivo, type BibliotecaIa } from "./biblioteca-ia.ts";
 
 export interface BibliotecaServiceDeps {
 	biblioteca: BibliotecaStore;
 	/** Ids de tópico citados por sessões (marcador ufj-context). */
 	topicosEmSessoes: () => string[];
+	/** Chamadas de modelo (sugestão de tópicos dos materiais). */
+	ia?: BibliotecaIa;
+}
+
+/** Envio grande demais (o mesmo limite das importações de notas, 25 MiB). */
+export class BibliotecaEnvioGrandeError extends Error {
+	constructor() {
+		super("O envio é grande demais. O limite é 25 MB por vez.");
+		this.name = "BibliotecaEnvioGrandeError";
+	}
 }
 
 export interface BibliotecaListagem {
@@ -64,7 +76,57 @@ export function createBibliotecaService(deps: BibliotecaServiceDeps) {
 			const materia = biblioteca.readMateria(codigo);
 			const turma = materia ? biblioteca.readTurma(codigo, turmaId) : null;
 			if (!materia || !turma) throw new BibliotecaNaoEncontradaError("Turma não encontrada.");
-			return { materia, turma, referencias: biblioteca.readReferencias(codigo, turmaId) };
+			return { materia, turma, referencias: biblioteca.readReferencias(codigo, turmaId), arquivos: biblioteca.listReferenciaFiles(codigo, turmaId) };
+		},
+
+		/**
+		 * Copia materiais para a turma (sem revisão: são arquivos do próprio dono)
+		 * e pede sugestões de tópico só para os que não eram repetidos. NÃO grava
+		 * o mapeamento — isso é o salvarReferencias, depois da revisão.
+		 */
+		async adicionarMateriais(codigo: string, turmaId: string, arquivos: { nome: string; bytes: Uint8Array }[], signal?: AbortSignal) {
+			const materia = biblioteca.readMateria(codigo);
+			if (!materia || !biblioteca.readTurma(codigo, turmaId)) throw new BibliotecaNaoEncontradaError("Turma não encontrada.");
+			if (arquivos.length === 0) throw new BibliotecaEntradaError("Escolha pelo menos um arquivo.");
+			for (const a of arquivos) {
+				const ext = a.nome.includes(".") ? a.nome.slice(a.nome.lastIndexOf(".")).toLowerCase() : "";
+				if (!(EXTENSOES_MATERIAIS as readonly string[]).includes(ext)) throw new BibliotecaEntradaError(`Tipo de arquivo não aceito: ${a.nome}`);
+			}
+			if (arquivos.reduce((t, a) => t + a.bytes.byteLength, 0) > MAX_IMPORT_BYTES) throw new BibliotecaEnvioGrandeError();
+			const adicionados: { arquivo: string; reutilizado: boolean }[] = [];
+			const novos: { arquivo: string; trecho: string }[] = [];
+			for (const a of arquivos) {
+				const copia = a.bytes.slice(); // a conversão de PDF pode consumir o buffer
+				const r = biblioteca.addReferenciaFile(codigo, turmaId, a.nome, a.bytes);
+				adicionados.push({ arquivo: r.arquivo, reutilizado: r.reutilizado });
+				if (!r.reutilizado) novos.push({ arquivo: r.arquivo, trecho: await trechoDoArquivo(r.arquivo, copia) });
+			}
+			if (novos.length === 0) return { adicionados, sugestoes: [], custoUsd: null };
+			if (!deps.ia) throw new Error("bibliotecaService sem serviço de IA");
+			const { sugestoes, custoUsd } = await deps.ia.sugerirTopicosDosMateriais(codigo, turmaId, novos, signal);
+			return { adicionados, sugestoes, custoUsd };
+		},
+
+		/** Grava o mapeamento revisado arquivo → tópicos (substitui o referencias.json inteiro). */
+		salvarReferencias(codigo: string, turmaId: string, mapa: unknown) {
+			const materia = biblioteca.readMateria(codigo);
+			if (!materia || !biblioteca.readTurma(codigo, turmaId)) throw new BibliotecaNaoEncontradaError("Turma não encontrada.");
+			const lista = (mapa as { arquivos?: unknown })?.arquivos;
+			if (!Array.isArray(lista)) throw new BibliotecaEntradaError("Envie a lista de arquivos com seus tópicos.");
+			const ativos = new Set(materia.topicos.filter((t) => !t.arquivado).map((t) => t.id));
+			const arquivos = lista.map((x) => {
+				const e = x as { arquivo?: unknown; titulo?: unknown; topicos?: unknown };
+				if (typeof e?.arquivo !== "string") throw new BibliotecaEntradaError("Cada item precisa do nome do arquivo.");
+				const sha256 = biblioteca.referenciaSha256(codigo, turmaId, e.arquivo);
+				if (!sha256) throw new BibliotecaEntradaError(`O arquivo "${e.arquivo}" não está guardado nesta turma.`);
+				const topicos = Array.isArray(e.topicos) ? e.topicos : [];
+				for (const id of topicos) if (typeof id !== "string" || !ativos.has(id)) throw new BibliotecaEntradaError(`O tópico "${String(id)}" não está ativo na matéria.`);
+				const entrada: { arquivo: string; titulo?: string; topicos: string[]; sha256: string } = { arquivo: e.arquivo, topicos: topicos as string[], sha256 };
+				if (typeof e.titulo === "string" && e.titulo.trim()) entrada.titulo = e.titulo.trim();
+				return entrada;
+			});
+			biblioteca.writeReferencias(codigo, turmaId, { formato: 1, arquivos });
+			return biblioteca.readReferencias(codigo, turmaId);
 		},
 
 		/** Grava um plano revisado: matéria (tópicos reconciliados) e turma com o PDF original. */
@@ -115,4 +177,5 @@ export type BibliotecaService = ReturnType<typeof createBibliotecaService>;
 export const bibliotecaService: BibliotecaService = createBibliotecaService({
 	biblioteca: stores.bibliotecaStore,
 	topicosEmSessoes: () => [],
+	ia: bibliotecaIa,
 });
