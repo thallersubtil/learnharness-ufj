@@ -16,7 +16,7 @@ import type { ChatStore } from "../core/ports.ts";
 import type { ChatRecord, ChatSettings, ChatSummary, ExtractionRunUsage, ImageSnapshot, PlanTree, SideChatThread, TurnUsage } from "../core/contracts.ts";
 import { CURRENT_CHAT_VERSION } from "../core/contracts.ts";
 import type { LhMessage } from "../core/native-messages.ts";
-import { activeProblemOf, danglingQuestionOf } from "../core/native-messages.ts";
+import { activeProblemOf, concludedProblemCount, danglingQuestionOf, ufjContextOf } from "../core/native-messages.ts";
 import { phaseAt3Lh } from "../core/phases.ts";
 import { removeLeftoverTemps, writeFileAtomicSync } from "./atomic-write.ts";
 
@@ -78,6 +78,13 @@ function getChat(id: string): ChatRecord | null {
 	return parsed as ChatRecord;
 }
 
+/** The summary's UFJ link (ids only — the names stay on the marker). */
+function ufjSummaryOf(messages: readonly LhMessage[]): Pick<ChatSummary, "ufj"> {
+	const p = ufjContextOf(messages);
+	if (!p) return {};
+	return { ufj: { materia: p.materia, turma: p.turma, avaliacao: p.avaliacao, ...(p.topico ? { topico: p.topico } : {}) } };
+}
+
 function listChats(): ChatSummary[] {
 	try {
 		fs.mkdirSync(PATHS.chats, { recursive: true });
@@ -113,6 +120,10 @@ function listChats(): ChatSummary[] {
 						// "Problem waiting"); false on teaching sessions, which
 						// have no problem tool.
 						pendingProblem: activeProblemOf(messages) !== null,
+						// UFJ library (spec Etapa A §7.5): the preparation screen's
+						// "praticado" signal and the session ↔ topic link.
+						concludedProblems: concludedProblemCount(messages),
+						...ufjSummaryOf(messages),
 					};
 				} catch (err) {
 					console.error(`[chat ${summary.id}] summary projection failed:`, err);

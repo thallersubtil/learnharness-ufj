@@ -50,6 +50,7 @@ import { compactAnswerForModel, type QuestionAnswerData } from "./question-core.
 import { activeCompactionOf, keptIndexFor } from "./compaction.ts";
 import { parseQuestionInput } from "./tool-parts.ts";
 import { expandCitationsForModel } from "./citations.ts";
+import type { UfjContextPayload } from "./ufj-context.ts";
 import { readPluginQuestionMessageAnnotation, readPluginQuestionAnswer, readPluginQuestionCancellation, samePluginQuestionOccurrence, type PluginQuestionAnnotationRead, type PluginQuestionOccurrence, type PluginQuestionOccurrenceMap, type PluginQuestionSnapshot } from "./plugin-questions.ts";
 
 /** The hard-invariant wording for an aborted turn's unanswered calls —
@@ -74,6 +75,7 @@ export interface LhMarkerMessage {
 	role: "custom";
 	customType:
 		| "graph-context"
+		| "ufj-context"
 		| "probe-handoff"
 		| "subagent-steer"
 		| "subagent-abort"
@@ -404,6 +406,32 @@ export function newProblemDismissedMarker(problemCallId: string): LhMarkerMessag
 	};
 }
 
+/** The UFJ library context (spec Etapa A §7.6): message[0] of a session
+ *  created from a library topic. `content` is the model-facing Portuguese
+ *  text (composed server-side from the library); `details` is the payload
+ *  the UfjContextCard renders and the preparation screen links by. */
+export function newUfjContextMessage(payload: UfjContextPayload, content: string): LhMarkerMessage {
+	return {
+		id: newMessageId(),
+		role: "custom",
+		customType: "ufj-context",
+		content,
+		display: true,
+		details: { ...payload },
+		timestamp: Date.now(),
+	};
+}
+
+/** The session's UFJ link: the first ufj-context marker's payload, or null. */
+export function ufjContextOf(messages: readonly LhMessage[]): UfjContextPayload | null {
+	for (const m of messages) {
+		if ((m as { role?: string }).role !== "custom") continue;
+		const marker = m as LhMarkerMessage;
+		if (marker.customType === "ufj-context" && marker.details && typeof marker.details === "object") return marker.details as UfjContextPayload;
+	}
+	return null;
+}
+
 /** The dismissal's deferred conclude (owner ruling 2026-10-04): the pair
  *  prepended to the user's NEXT input — a synthetic assistant message
  *  carrying a conclude call (outcome "dismissed") plus its ack result, so
@@ -470,6 +498,22 @@ function cleanToolCallIds(messages: readonly LhMessage[]): Set<string> {
 		if (!result.isError) ids.add(result.toolCallId);
 	}
 	return ids;
+}
+
+/** Practice problems concluded cleanly: conclude calls whose result is not an
+ *  error, excluding the synthetic dismissal conclude (outcome "dismissed"). */
+export function concludedProblemCount(messages: readonly LhMessage[]): number {
+	const clean = cleanToolCallIds(messages);
+	let n = 0;
+	for (const m of messages) {
+		if ((m as { role?: string }).role !== "assistant") continue;
+		for (const block of (m as AssistantMessage).content) {
+			if (block.type !== "toolCall" || block.name !== PRACTICE_CONCLUDE_TOOL || !clean.has(block.id)) continue;
+			if ((block.arguments as { outcome?: unknown } | undefined)?.outcome === "dismissed") continue;
+			n++;
+		}
+	}
+	return n;
 }
 
 /** Common practice pose recognition, independent of the currently enabled plugins. */
@@ -988,7 +1032,7 @@ export function nativeInputCause(message: AgentMessage, history: readonly AgentM
 	if (message.role === "custom") {
 		if (["probe-handoff", "subagent-steer", "subagent-abort"].includes(message.customType)) return "automatic";
 		if (["practice-thinking", "plugin-problem-submission", "practice-next"].includes(message.customType)) return "learner";
-		return ["graph-context", "plan-block", "problem-dismissed", "compaction", "side-question", "side-question-told"].includes(message.customType) ? "neutral" : "unrecognizable";
+		return ["graph-context", "ufj-context", "plan-block", "problem-dismissed", "compaction", "side-question", "side-question-told"].includes(message.customType) ? "neutral" : "unrecognizable";
 	}
 	if (message.role === "toolResult") {
 		const pluginAnswer = readPluginQuestionAnswer(message.details);

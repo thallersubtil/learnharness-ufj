@@ -170,12 +170,9 @@ export function createBibliotecaService(deps: BibliotecaServiceDeps) {
 
 export type BibliotecaService = ReturnType<typeof createBibliotecaService>;
 
-/**
- * A instância de produção. `topicosEmSessoes` passa a ler as sessões quando o
- * marcador ufj-context existir (tarefa 8); até lá nenhuma sessão cita tópicos.
- */
+/** A instância de produção: os tópicos citados por sessões vêm do marcador ufj-context. */
 export const bibliotecaService: BibliotecaService = createBibliotecaService({
 	biblioteca: stores.bibliotecaStore,
-	topicosEmSessoes: () => [],
+	topicosEmSessoes: () => stores.chatStore.listChats().flatMap((c) => (c.ufj?.topico ? [c.ufj.topico] : [])),
 	ia: bibliotecaIa,
 });

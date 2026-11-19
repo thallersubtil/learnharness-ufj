@@ -420,6 +420,16 @@ function projectMarker(marker: LhMarkerMessage, out: LhViewMessage[]): void {
 			});
 			return;
 		}
+		case "ufj-context": {
+			// The UFJ library context (spec Etapa A §7.6): a quiet card above
+			// the first user message, like the graph-context pick.
+			out.push({
+				id: marker.id,
+				role: "user",
+				parts: [{ type: "data-ufj-context", id: `uc_${marker.id}`, data: marker.details }],
+			});
+			return;
+		}
 		case "probe-handoff": {
 			out.push({
 				id: marker.id,

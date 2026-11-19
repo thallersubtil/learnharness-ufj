@@ -99,7 +99,7 @@ test("external native backend composes host, inference, persistent managed input
 	const learningFile = path.join(learningDirectory, "learning_fixture.json");
 	fs.writeFileSync(learningFile, JSON.stringify(learningRecord));
 	const learningBytes = fs.readFileSync(learningFile, "utf8");
-	const summaries: ChatSummary[] = [{ id: learningRecord.id, title: learningRecord.title, createdAt: learningRecord.createdAt, updatedAt: learningRecord.updatedAt, kind: "teach", messageCount: 1, phase: "probe", pendingQuestion: false, pendingProblem: false }];
+	const summaries: ChatSummary[] = [{ id: learningRecord.id, title: learningRecord.title, createdAt: learningRecord.createdAt, updatedAt: learningRecord.updatedAt, kind: "teach", messageCount: 1, phase: "probe", pendingQuestion: false, pendingProblem: false, concludedProblems: 0 }];
 	const chatReads: Pick<ChatStore, "getChat" | "listChats"> = {
 		getChat: id => id === learningRecord.id ? JSON.parse(fs.readFileSync(learningFile, "utf8")) as ChatRecord : null,
 		listChats: () => structuredClone(summaries),
