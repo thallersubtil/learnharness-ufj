@@ -141,6 +141,18 @@ export const PROMPTS_OVERRIDE_DIR = path.join(/* turbopackIgnore: true */ DATA_R
 export const THEMES_DIR = path.join(/* turbopackIgnore: true */ DATA_ROOT, "themes");
 
 /**
+ * Biblioteca UFJ (spec Etapa A §7.2): matérias, turmas, planos e materiais —
+ * dados compartilháveis na Etapa B (git). Nunca guarda dados pessoais.
+ */
+export const BIBLIOTECA_DIR = path.join(/* turbopackIgnore: true */ DATA_ROOT, "biblioteca");
+
+/**
+ * Estudo pessoal (spec Etapa A §7.1): horas por preparação e custo das
+ * chamadas da biblioteca. Fica fora da biblioteca de propósito.
+ */
+export const ESTUDO_DIR = path.join(/* turbopackIgnore: true */ DATA_ROOT, "estudo");
+
+/**
  * THE AUTH/KEY STORE (auth-keys wave, 2026-09-19): BYOK provider keys in a
  * flat {VAR: value} JSON map — the SAME file the Electron app has always
  * hand-edited (owner decision: option A, zero migration). Desktop main.cjs
