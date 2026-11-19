@@ -152,3 +152,28 @@ describe("rascunho do plano", () => {
 		assert.deepEqual(r.turma.aulas[0].topicos, ["limites"]);
 	});
 });
+
+describe("reaproveitar tópicos ao reimportar (revisão final, item 2)", () => {
+	it("acha a matéria pelo código em qualquer lugar do texto, sem depender de 'Código:'", async () => {
+		bibliotecaStore.writeMateria(materiaValida());
+		const pdf = tinyPdf([{ runs: [{ text: "PLANO DE ENSINO - Disciplina Teste (ICE0001) - Prof. Exemplo", x: 50, y: 700 }] }]);
+		const vistos: string[] = [];
+		const comExistente = planoFicticio({ topicos: [{ ref: "limites", titulo: "Limites", existente: true }], aulas: [{ rotulo: "1", conteudo: "Limites", topicos: ["limites"] }] });
+		const res = await rascunhoRoute(requestCom(pdfFile(pdf)), ia(async () => fauxEngine([comExistente], vistos)));
+		assert.equal(res.status, 200);
+		assert.match(vistos[0]!, /- limites: Limites/);
+		assert.ok(!(await res.json()).avisos.some((a: string) => /não foram mostrados ao modelo/.test(a)));
+	});
+
+	it("avisa quando a matéria só foi reconhecida depois da leitura", async () => {
+		bibliotecaStore.writeMateria(materiaValida());
+		const pdf = tinyPdf([{ runs: [{ text: "PLANO DE ENSINO sem codigo legivel", x: 50, y: 700 }] }]);
+		const vistos: string[] = [];
+		const res = await rascunhoRoute(requestCom(pdfFile(pdf)), ia(async () => fauxEngine([planoFicticio()], vistos)));
+		assert.equal(res.status, 200);
+		assert.match(vistos[0]!, /\(nenhum\)/);
+		const r = await res.json();
+		assert.equal(r.existente.materia, true);
+		assert.ok(r.avisos.some((a: string) => /não foram mostrados ao modelo/.test(a)), JSON.stringify(r.avisos));
+	});
+});

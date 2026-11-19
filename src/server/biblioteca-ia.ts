@@ -265,7 +265,20 @@ function medidor(deps: BibliotecaIaDeps, operacao: UsoBiblioteca["operacao"]) {
 	};
 }
 
-const CODIGO_NO_TEXTO = /C[óo]digo:\s*([A-Z0-9]{3,12})/;
+const CODIGO_NO_TEXTO = /c[óo]digo[^A-Za-z0-9]{0,40}([A-Za-z]{2,6}\d{2,6})/i;
+
+/**
+ * O código da disciplina no texto do plano: primeiro um código que JÁ está na
+ * biblioteca e aparece em qualquer lugar do texto (é o caso que importa para
+ * reaproveitar tópicos), depois o padrão "Código … ABC1234" em qualquer grafia.
+ */
+function codigoNoTexto(texto: string, biblioteca: BibliotecaStore): string | undefined {
+	const maiusculo = texto.toUpperCase();
+	for (const m of biblioteca.listMaterias().materias) {
+		if (new RegExp(`(^|[^A-Z0-9])${m.codigo}([^A-Z0-9]|$)`).test(maiusculo)) return m.codigo;
+	}
+	return CODIGO_NO_TEXTO.exec(texto)?.[1]?.toUpperCase();
+}
 
 export function createBibliotecaIa(deps: BibliotecaIaDeps): BibliotecaIa {
 	const convert = deps.convert ?? convertPdf;
@@ -277,7 +290,7 @@ export function createBibliotecaIa(deps: BibliotecaIaDeps): BibliotecaIa {
 		const textoPlano = joinPages(convertido.pages);
 		if (!textoPlano.trim()) throw new BibliotecaEntradaError("Este PDF não tem texto selecionável (talvez seja escaneado). Por enquanto, a importação aceita só PDFs com texto.");
 
-		const codigoVisto = CODIGO_NO_TEXTO.exec(textoPlano)?.[1];
+		const codigoVisto = codigoNoTexto(textoPlano, deps.biblioteca);
 		const materiaAntes = codigoVisto && isValidCodigo(codigoVisto) ? deps.biblioteca.readMateria(codigoVisto) : null;
 		const existentes = (materiaAntes?.topicos ?? []).filter((t) => !t.arquivado);
 		const listaExistentes = existentes.length ? existentes.map((t) => `- ${t.id}: ${t.titulo}`).join("\n") : "(nenhum)";
@@ -346,10 +359,13 @@ export function createBibliotecaIa(deps: BibliotecaIaDeps): BibliotecaIa {
 		if (enviado.turma.chPratica !== undefined) turma.chPratica = enviado.turma.chPratica;
 		if (enviado.turma.recuperacao) turma.recuperacao = enviado.turma.recuperacao;
 		if (enviado.turma.metodologia) turma.metodologia = enviado.turma.metodologia;
+		const naoMostrados = materiaBase !== null && materiaBase !== materiaAntes
+			? ["Esta matéria já estava na biblioteca, mas os tópicos dela não foram mostrados ao modelo durante a leitura. Confira se há tópicos repetidos (com -2 no fim) e junte-os aos existentes."]
+			: [];
 		return {
 			materia,
 			turma,
-			avisos: [...rec.erros, ...escopos.avisos],
+			avisos: [...naoMostrados, ...rec.erros, ...escopos.avisos],
 			custoUsd,
 			existente: { materia: materiaBase !== null, turma: materiaBase !== null && deps.biblioteca.readTurma(materia.codigo, turma.id) !== null },
 		};

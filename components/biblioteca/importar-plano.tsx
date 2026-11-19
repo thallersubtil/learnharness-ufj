@@ -86,7 +86,7 @@ export function ImportarPlanoScreen() {
 					<>
 						<Aviso>
 							Rascunho pronto ({custo(rascunho.custoUsd)}). Confira o cronograma, os tópicos e o que cai em cada prova antes de salvar.
-							{rascunho.existente.materia && " Esta matéria já está na biblioteca: os tópicos existentes foram reaproveitados."}
+							{rascunho.existente.materia && " Esta matéria já está na biblioteca."}
 						</Aviso>
 						<PlanoForm materia={plano.materia} turma={plano.turma} avisos={rascunho.avisos} onChange={setPlano} />
 						{estado === "confirmar" ? (
