@@ -109,6 +109,18 @@ describe("materiais da turma", () => {
 		assert.deepEqual(t.arquivos, ["4_-_pilha.pdf", "lista.md"]);
 	});
 
+	it("tópico mapeado que sai da matéria vira arquivado, e o mapeamento antigo ainda salva (revisão final, item 1)", async () => {
+		const svc = svcCom([]);
+		await server.materiaisPutRoute(put({ arquivos: [{ arquivo: "lista.md", topicos: ["fila-circular"] }] }), "ICE0001", TURMA, svc);
+		const m = bibliotecaStore.readMateria("ICE0001")!;
+		const semFila = { ...m, topicos: m.topicos.filter((t) => t.id !== "fila-circular") };
+		assert.equal((await server.materiaPutRoute(new Request("http://localhost/x", { method: "PUT", body: JSON.stringify(semFila) }), "ICE0001", svc)).status, 200);
+		assert.equal(bibliotecaStore.readMateria("ICE0001")!.topicos.find((t) => t.id === "fila-circular")?.arquivado, true, "citado só pelos materiais, vira arquivado em vez de sumir");
+		const res = await server.materiaisPutRoute(put({ arquivos: [{ arquivo: "lista.md", topicos: ["fila-circular"] }] }), "ICE0001", TURMA, svc);
+		assert.equal(res.status, 200);
+		assert.deepEqual(bibliotecaStore.readReferencias("ICE0001", TURMA).arquivos.find((a) => a.arquivo === "lista.md")!.topicos, []);
+	});
+
 	it("turma inexistente dá 404", async () => {
 		const svc = svcCom([]);
 		assert.equal((await server.materiaisPostRoute(envio([new File(["x"], "a.md")]), "ICE0001", "2020-1-ninguem", svc)).status, 404);

@@ -42,21 +42,40 @@ export interface BibliotecaListagem {
 	problemas: string[];
 }
 
-/** Toda referência de tópico da turma precisa existir na matéria e não estar arquivada. */
-function checarReferencias(materia: Materia, turma: Turma): void {
+/**
+ * Toda referência de tópico da turma precisa existir na matéria. Tópicos
+ * ARQUIVADOS saem das aulas e dos escopos (spec §7.2: "some das listas de
+ * escopo"); só um id que a matéria não conhece é erro. Assim, arquivar um
+ * tópico em outra turma nunca deixa esta sem conseguir salvar.
+ */
+function limparReferencias(materia: Materia, turma: Turma): Turma {
+	const conhecidos = new Set(materia.topicos.map((t) => t.id));
 	const ativos = new Set(materia.topicos.filter((t) => !t.arquivado).map((t) => t.id));
-	const ruins = new Set<string>();
-	for (const a of turma.aulas) for (const id of a.topicos) if (!ativos.has(id)) ruins.add(id);
-	for (const av of turma.avaliacoes) for (const id of av.escopo.topicos) if (!ativos.has(id)) ruins.add(id);
-	if (ruins.size) throw new BibliotecaEntradaError(`A turma cita tópicos que não estão ativos na matéria: ${[...ruins].map((x) => `"${x}"`).join(", ")}.`);
+	const desconhecidos = new Set<string>();
+	const filtra = (ids: string[]) => ids.filter((id) => {
+		if (!conhecidos.has(id)) desconhecidos.add(id);
+		return ativos.has(id);
+	});
+	const limpa: Turma = {
+		...turma,
+		aulas: turma.aulas.map((a) => ({ ...a, topicos: filtra(a.topicos) })),
+		avaliacoes: turma.avaliacoes.map((av) => ({ ...av, escopo: { topicos: filtra(av.escopo.topicos) } })),
+	};
+	if (desconhecidos.size) throw new BibliotecaEntradaError(`A turma cita tópicos que não estão na matéria: ${[...desconhecidos].map((x) => `"${x}"`).join(", ")}.`);
+	return limpa;
 }
 
 export function createBibliotecaService(deps: BibliotecaServiceDeps) {
 	const { biblioteca } = deps;
 
+	/** Tópicos citados pelos materiais de todas as turmas da matéria. */
+	function citadosPorMateriais(codigo: string): string[] {
+		return biblioteca.listTurmas(codigo).flatMap((t) => biblioteca.readReferencias(codigo, t.id).arquivos.flatMap((a) => a.topicos));
+	}
+
 	function topicosFinais(codigo: string, depois: Materia["topicos"], turmasConsideradas: Turma[]): Materia["topicos"] {
 		const antes = biblioteca.readMateria(codigo)?.topicos ?? [];
-		const referenciados = topicosReferenciados(turmasConsideradas, deps.topicosEmSessoes());
+		const referenciados = topicosReferenciados(turmasConsideradas, [...deps.topicosEmSessoes(), ...citadosPorMateriais(codigo)]);
 		return arquivarRemovidos(antes, depois, referenciados);
 	}
 
@@ -113,6 +132,7 @@ export function createBibliotecaService(deps: BibliotecaServiceDeps) {
 			if (!materia || !biblioteca.readTurma(codigo, turmaId)) throw new BibliotecaNaoEncontradaError("Turma não encontrada.");
 			const lista = (mapa as { arquivos?: unknown })?.arquivos;
 			if (!Array.isArray(lista)) throw new BibliotecaEntradaError("Envie a lista de arquivos com seus tópicos.");
+			const conhecidos = new Set(materia.topicos.map((t) => t.id));
 			const ativos = new Set(materia.topicos.filter((t) => !t.arquivado).map((t) => t.id));
 			const arquivos = lista.map((x) => {
 				const e = x as { arquivo?: unknown; titulo?: unknown; topicos?: unknown };
@@ -120,8 +140,9 @@ export function createBibliotecaService(deps: BibliotecaServiceDeps) {
 				const sha256 = biblioteca.referenciaSha256(codigo, turmaId, e.arquivo);
 				if (!sha256) throw new BibliotecaEntradaError(`O arquivo "${e.arquivo}" não está guardado nesta turma.`);
 				const topicos = Array.isArray(e.topicos) ? e.topicos : [];
-				for (const id of topicos) if (typeof id !== "string" || !ativos.has(id)) throw new BibliotecaEntradaError(`O tópico "${String(id)}" não está ativo na matéria.`);
-				const entrada: { arquivo: string; titulo?: string; topicos: string[]; sha256: string } = { arquivo: e.arquivo, topicos: topicos as string[], sha256 };
+				for (const id of topicos) if (typeof id !== "string" || !conhecidos.has(id)) throw new BibliotecaEntradaError(`O tópico "${String(id)}" não está na matéria.`);
+				// Tópicos arquivados saem do mapeamento em vez de travar o salvamento.
+				const entrada: { arquivo: string; titulo?: string; topicos: string[]; sha256: string } = { arquivo: e.arquivo, topicos: (topicos as string[]).filter((id) => ativos.has(id)), sha256 };
 				if (typeof e.titulo === "string" && e.titulo.trim()) entrada.titulo = e.titulo.trim();
 				return entrada;
 			});
@@ -137,9 +158,9 @@ export function createBibliotecaService(deps: BibliotecaServiceDeps) {
 			if (biblioteca.readTurma(codigo, turma.id) && !d.substituir) throw new BibliotecaConflitoError();
 			const outras = biblioteca.readMateria(codigo) ? biblioteca.listTurmas(codigo).filter((t) => t.id !== turma.id) : [];
 			const materia: Materia = { ...materiaNova, topicos: topicosFinais(codigo, materiaNova.topicos, [...outras, turma]) };
-			checarReferencias(materia, turma);
+			const turmaLimpa = limparReferencias(materia, turma);
 			biblioteca.writeMateria(materia);
-			biblioteca.writeTurma(codigo, turma, planoPdf);
+			biblioteca.writeTurma(codigo, turmaLimpa, planoPdf);
 			return { codigo, turma: turma.id };
 		},
 
@@ -161,9 +182,9 @@ export function createBibliotecaService(deps: BibliotecaServiceDeps) {
 			if (turma.id !== turmaIdDoEndereco) throw new BibliotecaEntradaError("O id da turma não confere com o endereço.");
 			const materia = biblioteca.readMateria(codigo);
 			if (!materia || !biblioteca.readTurma(codigo, turma.id)) throw new BibliotecaNaoEncontradaError("Turma não encontrada.");
-			checarReferencias(materia, turma);
-			biblioteca.writeTurma(codigo, turma);
-			return turma;
+			const limpa = limparReferencias(materia, turma);
+			biblioteca.writeTurma(codigo, limpa);
+			return limpa;
 		},
 	};
 }

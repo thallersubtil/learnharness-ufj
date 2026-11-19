@@ -118,6 +118,19 @@ describe("editar matéria e turma", () => {
 		assert.equal(bibliotecaStore.readMateria("ICE0001")!.topicos.find((t) => t.id === "t2")!.arquivado, true);
 	});
 
+	it("PUT da turma que ainda cita um tópico arquivado salva e tira a referência (revisão final, item 1)", async () => {
+		await server.salvarPlanoRoute(planoRequest({ ...rascunho(), substituir: false }), svc);
+		const m = bibliotecaStore.readMateria("ICE0001")!;
+		m.topicos = m.topicos.filter((t) => t.id !== "t2");
+		await server.materiaPutRoute(new Request("http://localhost/x", { method: "PUT", body: JSON.stringify(m) }), "ICE0001", svc);
+		const t = bibliotecaStore.readTurma("ICE0001", "2026-2-prof-exemplo")!; // ainda cita t2 (arquivado)
+		const res = await server.turmaPutRoute(new Request("http://localhost/x", { method: "PUT", body: JSON.stringify(t) }), "ICE0001", "2026-2-prof-exemplo", svc);
+		assert.equal(res.status, 200);
+		const salva = bibliotecaStore.readTurma("ICE0001", "2026-2-prof-exemplo")!;
+		assert.ok(!salva.aulas.some((a) => a.topicos.includes("t2")));
+		assert.deepEqual(salva.avaliacoes[0]!.escopo.topicos, ["t1", "t3"]);
+	});
+
 	it("PUT da turma com escopo citando tópico inexistente dá 400", async () => {
 		await server.salvarPlanoRoute(planoRequest({ ...rascunho(), substituir: false }), svc);
 		const t = bibliotecaStore.readTurma("ICE0001", "2026-2-prof-exemplo")!;
