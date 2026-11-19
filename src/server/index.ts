@@ -29,6 +29,9 @@ export {
 } from "../store/settings.ts";
 export { promptOverrides } from "../store/prompt-overrides.ts";
 export { themeStore } from "../store/themes.ts";
+// Biblioteca UFJ (spec Etapa A): serviço de IA e transporte HTTP.
+export { createBibliotecaIa, bibliotecaIa, resolveBibliotecaEngine, type BibliotecaIa, type RascunhoPlano, type SugestoesMateriais } from "./biblioteca-ia.ts";
+export * from "./biblioteca-rotas.ts";
 export { readThemeBoot, type ThemeBoot } from "./theme-boot.ts";
 export { isValidSegmentPath } from "../core/prompt-segments.ts";
 // The canonical segment discovery/resolution lives in the agent layer

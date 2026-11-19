@@ -333,6 +333,7 @@ export const ROLE_SLOT: Readonly<Record<ModelRole, ModelSlotName>> = {
 	visualMaker: "vision",
 	pdfReader: "vision",
 	sideQuestion: "strong", // the conversation chain, like prober/teacher (resolveSideQuestionSpec)
+	biblioteca: "strong", // biblioteca UFJ: a estrutura do plano de ensino pede o modelo forte
 };
 
 /** General settings — app-level behavior. Version DISPLAY and plans login

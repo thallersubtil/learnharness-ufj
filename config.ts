@@ -56,7 +56,9 @@ export type ModelRole =
 	| "pdfReader"
 	| "extractor"
 	| "auditor"
-	| "sideQuestion";
+	| "sideQuestion"
+	/** Biblioteca UFJ: rascunho do plano de ensino e sugestão de materiais. */
+	| "biblioteca";
 
 /**
  * The LIVE graph store (src/store/graph.ts) — owned by the app's extraction
