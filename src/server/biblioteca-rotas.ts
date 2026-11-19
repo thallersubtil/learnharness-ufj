@@ -6,15 +6,17 @@
 
 import { FormBodyLimitError, readBoundedFormData } from "../../lib/bounded-form-data.ts";
 import { MAX_IMPORT_BODY_BYTES } from "../../lib/notes-import-limits.ts";
-import { BibliotecaConflitoError, BibliotecaEntradaError, BibliotecaFormatoError } from "../core/biblioteca.ts";
+import { BibliotecaConflitoError, BibliotecaEntradaError, BibliotecaFormatoError, BibliotecaNaoEncontradaError } from "../core/biblioteca.ts";
 import { ModelsNotConfiguredError, ProviderKeyMissingError } from "../core/settings.ts";
 import { bibliotecaIa, type BibliotecaIa } from "./biblioteca-ia.ts";
+import { bibliotecaService, type BibliotecaService } from "./biblioteca.ts";
 
 const PDF_MAGIC = "%PDF-";
 
 /** Converte um erro do serviço na resposta HTTP certa. */
 export function respostaDeErro(err: unknown): Response {
 	if (err instanceof BibliotecaEntradaError) return Response.json({ error: err.message }, { status: 400 });
+	if (err instanceof BibliotecaNaoEncontradaError) return Response.json({ error: err.message }, { status: 404 });
 	if (err instanceof BibliotecaConflitoError) return Response.json({ error: err.message, code: err.code }, { status: 409 });
 	if (err instanceof BibliotecaFormatoError) return Response.json({ error: err.message, code: "formato_mais_novo" }, { status: 409 });
 	if (err instanceof ModelsNotConfiguredError) return Response.json(err.envelope, { status: 503 });
@@ -50,6 +52,85 @@ export async function rascunhoRoute(request: Request, ia: BibliotecaIa = bibliot
 	if (pdf instanceof Response) return pdf;
 	try {
 		return Response.json(await ia.rascunhoDoPlano(pdf, request.signal));
+	} catch (err) {
+		return respostaDeErro(err);
+	}
+}
+
+// ─── salvar, listar e editar (tarefa 6) ──────────────────────────────────────
+
+async function lerJson(request: Request): Promise<unknown | Response> {
+	try {
+		return await request.json();
+	} catch {
+		return Response.json({ error: "O corpo do pedido não é um JSON válido." }, { status: 400 });
+	}
+}
+
+/** GET /api/biblioteca */
+export async function listarRoute(svc: BibliotecaService = bibliotecaService): Promise<Response> {
+	try {
+		return Response.json(svc.listar());
+	} catch (err) {
+		return respostaDeErro(err);
+	}
+}
+
+/** POST /api/biblioteca/plano — multipart `dados` (JSON {materia, turma, substituir}) e `plano` (PDF). */
+export async function salvarPlanoRoute(request: Request, svc: BibliotecaService = bibliotecaService): Promise<Response> {
+	const form = await lerFormulario(request);
+	if (form instanceof Response) return form;
+	const raw = form.get("dados");
+	let dados: { materia?: unknown; turma?: unknown; substituir?: unknown };
+	try {
+		dados = JSON.parse(typeof raw === "string" ? raw : "");
+	} catch {
+		return Response.json({ error: "Os dados do plano não são um JSON válido." }, { status: 400 });
+	}
+	const pdf = await lerPdf(form, "plano");
+	if (pdf instanceof Response) return pdf;
+	try {
+		return Response.json(svc.salvarPlano({ materia: dados?.materia, turma: dados?.turma, substituir: dados?.substituir === true }, pdf));
+	} catch (err) {
+		return respostaDeErro(err);
+	}
+}
+
+/** GET /api/biblioteca/materias/[codigo] */
+export async function materiaGetRoute(codigo: string, svc: BibliotecaService = bibliotecaService): Promise<Response> {
+	try {
+		return Response.json(svc.lerMateria(codigo));
+	} catch (err) {
+		return respostaDeErro(err);
+	}
+}
+
+/** PUT /api/biblioteca/materias/[codigo] — a matéria inteira. */
+export async function materiaPutRoute(request: Request, codigo: string, svc: BibliotecaService = bibliotecaService): Promise<Response> {
+	const body = await lerJson(request);
+	if (body instanceof Response) return body;
+	try {
+		return Response.json(svc.salvarMateria(codigo, body));
+	} catch (err) {
+		return respostaDeErro(err);
+	}
+}
+
+/** GET /api/biblioteca/materias/[codigo]/turmas/[turma] */
+export async function turmaGetRoute(codigo: string, turmaId: string, svc: BibliotecaService = bibliotecaService): Promise<Response> {
+	try {
+		return Response.json(svc.lerTurma(codigo, turmaId));
+	} catch (err) {
+		return respostaDeErro(err);
+	}
+}
+
+/** PUT /api/biblioteca/materias/[codigo]/turmas/[turma] — a turma inteira. */
+export async function turmaPutRoute(request: Request, codigo: string, turmaId: string, svc: BibliotecaService = bibliotecaService): Promise<Response> {
+	const body = await lerJson(request);
+	if (body instanceof Response) return body;
+	try {
+		return Response.json(svc.salvarTurma(codigo, turmaId, body));
 	} catch (err) {
 		return respostaDeErro(err);
 	}

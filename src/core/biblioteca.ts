@@ -115,6 +115,14 @@ export class BibliotecaEntradaError extends Error {
 	}
 }
 
+/** A matéria ou a turma pedida não existe na biblioteca. */
+export class BibliotecaNaoEncontradaError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = "BibliotecaNaoEncontradaError";
+	}
+}
+
 /** A turma já existe e o pedido não autorizou substituir. */
 export class BibliotecaConflitoError extends Error {
 	readonly code = "turma_existe";
