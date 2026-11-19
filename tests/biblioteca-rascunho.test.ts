@@ -177,3 +177,18 @@ describe("reaproveitar tópicos ao reimportar (revisão final, item 2)", () => {
 		assert.ok(r.avisos.some((a: string) => /não foram mostrados ao modelo/.test(a)), JSON.stringify(r.avisos));
 	});
 });
+
+describe("cancelar a importação (revisão final, item 6)", () => {
+	it("pedido cancelado responde 499 'Importação cancelada.' e não chama o modelo", async () => {
+		let chamadas = 0;
+		const controller = new AbortController();
+		const form = new FormData();
+		form.append("plano", pdfFile(PLANO_PDF));
+		const req = new Request("http://localhost/api/biblioteca/plano/rascunho", { method: "POST", body: form, signal: controller.signal });
+		controller.abort();
+		const res = await rascunhoRoute(req, ia(async () => { chamadas++; return fauxEngine([planoFicticio()]); }));
+		assert.equal(res.status, 499);
+		assert.equal((await res.json()).error, "Importação cancelada.");
+		assert.equal(chamadas, 0);
+	});
+});

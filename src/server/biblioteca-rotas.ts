@@ -46,15 +46,22 @@ export async function lerPdf(form: FormData, campo: string): Promise<Uint8Array 
 	return bytes;
 }
 
-/** POST /api/biblioteca/plano/rascunho — multipart `plano` → RascunhoPlano (nada é gravado). */
+/** O pedido foi cancelado pelo aluno (botão Cancelar ou saiu da tela). */
+const cancelada = () => Response.json({ error: "Importação cancelada." }, { status: 499 });
+
+/** POST /api/biblioteca/plano/rascunho — multipart `plano` → RascunhoPlano (nada é gravado).
+ *  Cancelável: o sinal do pedido chega à conversão do PDF e à chamada do modelo. */
 export async function rascunhoRoute(request: Request, ia: BibliotecaIa = bibliotecaIa): Promise<Response> {
+	if (request.signal.aborted) return cancelada();
 	const form = await lerFormulario(request);
-	if (form instanceof Response) return form;
+	if (form instanceof Response) return request.signal.aborted ? cancelada() : form;
 	const pdf = await lerPdf(form, "plano");
 	if (pdf instanceof Response) return pdf;
+	if (request.signal.aborted) return cancelada();
 	try {
 		return Response.json(await ia.rascunhoDoPlano(pdf, request.signal));
 	} catch (err) {
+		if (request.signal.aborted) return cancelada();
 		return respostaDeErro(err);
 	}
 }

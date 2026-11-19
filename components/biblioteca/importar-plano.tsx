@@ -6,7 +6,7 @@
  * "Salvar na biblioteca". Turma repetida pede confirmação para substituir.
  */
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Materia, Turma } from "@/src/core";
 import { Button } from "@/components/ui/button";
@@ -35,23 +35,31 @@ export function ImportarPlanoScreen() {
 	const [plano, setPlano] = useState<{ materia: Materia; turma: Turma } | null>(null);
 	const [estado, setEstado] = useState<"livre" | "lendo" | "salvando" | "confirmar">("livre");
 	const [erro, setErro] = useState<string | null>(null);
+	const leitura = useRef<AbortController | null>(null);
+	// Sair da tela cancela a leitura: o modelo forte não segue rodando (e cobrando) à toa.
+	useEffect(() => () => leitura.current?.abort(), []);
 
 	async function ler() {
 		if (!arquivo) return;
 		setEstado("lendo");
 		setErro(null);
+		const controller = new AbortController();
+		leitura.current = controller;
 		try {
 			const form = new FormData();
 			form.append("plano", arquivo);
-			const r = await lerResposta<Rascunho>(await fetch("/api/biblioteca/plano/rascunho", { method: "POST", body: form }));
+			const r = await lerResposta<Rascunho>(await fetch("/api/biblioteca/plano/rascunho", { method: "POST", body: form, signal: controller.signal }));
 			setRascunho(r);
 			setPlano({ materia: r.materia, turma: r.turma });
 		} catch (e) {
-			setErro((e as Error).message);
+			setErro(controller.signal.aborted ? "Importação cancelada." : (e as Error).message);
 		} finally {
+			leitura.current = null;
 			setEstado("livre");
 		}
 	}
+
+	const cancelar = () => leitura.current?.abort();
 
 	async function salvar(substituir: boolean) {
 		if (!arquivo || !plano) return;
@@ -88,6 +96,7 @@ export function ImportarPlanoScreen() {
 					<Button type="button" disabled={!arquivo || estado !== "livre"} onClick={() => void ler()}>
 						{estado === "lendo" ? "Lendo o plano…" : "Ler o plano"}
 					</Button>
+					{estado === "lendo" && <Button type="button" variant="ghost" onClick={cancelar}>Cancelar</Button>}
 				</div>
 				{erro && <Aviso tom="erro">{erro}</Aviso>}
 				{rascunho && plano && (
