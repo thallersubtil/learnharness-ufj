@@ -29,7 +29,7 @@ const PROMPTS_DIR = path.join(PATHS.root, "src", "agent", "prompts");
 const SIDE_BASE = path.join(PROMPTS_DIR, "side-chat", "00-base.md");
 const SIDE_STYLE = path.join(PROMPTS_DIR, "side-chat", "90-style.md");
 /** The shared appendix, in composition order (keys = override paths). */
-const SIDE_SHARED_FRAGMENTS = ["shared/10-voice.md", "shared/15-accuracy.md", "shared/40-formatting.md"];
+const SIDE_SHARED_FRAGMENTS = ["shared/05-portugues.md", "shared/10-voice.md", "shared/15-accuracy.md", "shared/40-formatting.md"];
 
 function readSource(file: string): string {
 	try {

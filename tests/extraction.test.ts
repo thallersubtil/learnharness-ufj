@@ -1494,9 +1494,10 @@ describe("the extractor redesign (owner, 2026-09-30): chains are the deliverable
 	it("preserves the complete teaching-session prompt byte-for-byte", () => {
 		// Original UTF-8 snapshot, including every newline, preamble and the
 		// session-only anchor rule. Notes-only changes must not alter it.
+		// UFJ (2026-11-19): + the Portuguese-output line (spec Etapa A §7.12).
 		assert.equal(
 			createHash("sha256").update(EXTRACTOR_INSTRUCTIONS, "utf8").digest("hex"),
-			"a8bddd7d47130ed5e39ffe7d8d0ed6efdd6b30407d52cd9838e7be2e465089a6",
+			"d67ff02d693dd136ab1dfa058989348b38b465b6aecabdc7bf82430d079dff4b",
 		);
 	});
 

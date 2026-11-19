@@ -108,7 +108,9 @@ SVG requirements:
 
 Your FINAL message: 1-2 sentences of notes for the teacher (what the figure shows, any caveats) —
 NEVER the SVG source itself. If you genuinely cannot make a correct picture of the brief, say exactly
-that in your final message and why.`;
+that in your final message and why.
+
+Todo texto visível ao aluno (títulos, rótulos, legendas, botões, mensagens) é em português do Brasil.`;
 
 const IMAGE_INSTRUCTIONS = `ANNOTATING THE LEARNER'S IMAGE — this brief comes with one of the learner's own pictures. Your
 figure is that picture with marks on it, not a new drawing:
@@ -125,7 +127,9 @@ figure is that picture with marks on it, not a new drawing:
   with a white halo (stroke="white" paint-order="stroke") or set in a margin with a leader line.
 - Never hide what the brief is about under a label or a fill.
 - If a feature the brief names is not in the picture, never guess where it is: leave it unmarked and say
-  so in your notes.`;
+  so in your notes.
+
+Todo texto visível ao aluno (títulos, rótulos, legendas, botões, mensagens) é em português do Brasil.`;
 
 /** The wire declarations (pi-ai Tool, TypeBox parameters): this loop owns
  *  execution itself — write/edit dispatch inline below, render feeds the

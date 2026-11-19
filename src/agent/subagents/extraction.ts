@@ -427,8 +427,11 @@ propositions list alone. Include every field even when empty — "chains": [] wh
 arguments. The tool's field descriptions carry the details.`,
 } as const;
 
+/** UFJ (spec Etapa A §7.12): the graph is in Portuguese, like everything the learner reads. */
+const LINHA_PORTUGUES_EXTRACAO = "Escreva o nome e o enunciado de cada proposição em português do Brasil, mesmo que a fonte esteja em outra língua.";
+
 function composeExtractionInstructions(preamble: string, goal: string, selection: string): string {
-	return `${preamble}\n\n${goal}\n${EXTRACTION_CORE.entailment}\n\n${EXTRACTION_CORE.knowledge}\n\n${selection} ${EXTRACTION_CORE.standalone}\n\n${EXTRACTION_CORE.continuation}\n\n${EXTRACTION_CORE.submission}`;
+	return `${preamble}\n\n${goal}\n${EXTRACTION_CORE.entailment}\n\n${EXTRACTION_CORE.knowledge}\n\n${selection} ${EXTRACTION_CORE.standalone}\n\n${EXTRACTION_CORE.continuation}\n\n${EXTRACTION_CORE.submission}\n\n${LINHA_PORTUGUES_EXTRACAO}`;
 }
 
 // Each front door owns its goal and selection wording independently of the
