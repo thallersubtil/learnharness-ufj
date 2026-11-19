@@ -123,7 +123,9 @@ describe("rascunho do plano", () => {
 	it("sem modelo configurado dá 503 models_not_configured", async () => {
 		const res = await rascunhoRoute(requestCom(pdfFile(PLANO_PDF)), ia(async () => { throw new ModelsNotConfiguredError(["strong"]); }));
 		assert.equal(res.status, 503);
-		assert.equal((await res.json()).code, "models_not_configured");
+		const body = await res.json();
+		assert.equal(body.code, "models_not_configured");
+		assert.equal(body.error, "Nenhum modelo configurado. Escolha seus modelos em Settings → Providers.");
 	});
 
 	it("aula citando ref inexistente volta como erro para o modelo, e a correção é aceita", async () => {

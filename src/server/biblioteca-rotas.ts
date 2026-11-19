@@ -21,8 +21,8 @@ export function respostaDeErro(err: unknown): Response {
 	if (err instanceof BibliotecaEnvioGrandeError) return Response.json({ error: err.message }, { status: 413 });
 	if (err instanceof BibliotecaConflitoError) return Response.json({ error: err.message, code: err.code }, { status: 409 });
 	if (err instanceof BibliotecaFormatoError) return Response.json({ error: err.message, code: "formato_mais_novo" }, { status: 409 });
-	if (err instanceof ModelsNotConfiguredError) return Response.json(err.envelope, { status: 503 });
-	if (err instanceof ProviderKeyMissingError) return Response.json(err.envelope, { status: 503 });
+	if (err instanceof ModelsNotConfiguredError) return Response.json({ ...err.envelope, error: "Nenhum modelo configurado. Escolha seus modelos em Settings → Providers." }, { status: 503 });
+	if (err instanceof ProviderKeyMissingError) return Response.json({ ...err.envelope, error: `Falta a chave de API do provedor ${err.envelope.provider}. Adicione em Settings → Providers.` }, { status: 503 });
 	console.error("[biblioteca] erro inesperado:", err);
 	return Response.json({ error: `Erro inesperado: ${err instanceof Error ? err.message : String(err)}` }, { status: 500 });
 }
