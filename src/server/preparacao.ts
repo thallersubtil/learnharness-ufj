@@ -9,6 +9,7 @@
 
 import {
 	BibliotecaEntradaError,
+	BibliotecaFormatoError,
 	isValidCodigo,
 	isValidSlug,
 	type Aula,
@@ -62,7 +63,8 @@ export function resolveUfjRef(ref: UfjContextRef, deps: Pick<PreparacaoDeps, "bi
 	try {
 		materia = deps.biblioteca.readMateria(ref.materia);
 		turma = materia ? deps.biblioteca.readTurma(ref.materia, ref.turma) : null;
-	} catch {
+	} catch (err) {
+		if (err instanceof BibliotecaFormatoError) throw err; // a causa real, não "desconhecido"
 		throw new BibliotecaEntradaError(DESCONHECIDO);
 	}
 	const avaliacao = turma?.avaliacoes.find((a) => a.id === ref.avaliacao);
@@ -119,7 +121,8 @@ export function preparacaoView(ref: { materia: string; turma: string; avaliacao:
 	try {
 		materia = deps.biblioteca.readMateria(ref.materia);
 		turma = materia ? deps.biblioteca.readTurma(ref.materia, ref.turma) : null;
-	} catch {
+	} catch (err) {
+		if (err instanceof BibliotecaFormatoError) throw err; // a causa real, não "desconhecida"
 		throw new BibliotecaEntradaError("Matéria, turma ou avaliação desconhecida.");
 	}
 	const avaliacao = turma?.avaliacoes.find((a) => a.id === ref.avaliacao);

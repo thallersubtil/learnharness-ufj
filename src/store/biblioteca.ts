@@ -147,24 +147,31 @@ export const bibliotecaStore: BibliotecaStore = {
 	},
 
 	listTurmas(codigo) {
+		return this.listTurmasComProblemas(codigo).turmas;
+	},
+
+	listTurmasComProblemas(codigo) {
 		const dir = path.join(/* turbopackIgnore: true */ materiaDir(codigo), "turmas");
 		let nomes: string[];
 		try {
 			nomes = fs.readdirSync(dir);
 		} catch {
-			return [];
+			return { turmas: [], problemas: [] };
 		}
-		const out: Turma[] = [];
+		const turmas: Turma[] = [];
+		const problemas: string[] = [];
 		for (const nome of nomes.sort()) {
-			if (!isValidSlug(nome)) continue;
+			if (nome.startsWith(".") || !isValidSlug(nome)) continue;
 			try {
 				const t = readJson(path.join(/* turbopackIgnore: true */ dir, nome, "turma.json"), parseTurma);
-				if (t && t.id === nome) out.push(t);
+				if (!t) continue;
+				if (t.id !== nome) problemas.push(`${codigo}/${nome}: o id dentro do arquivo é "${t.id}"`);
+				else turmas.push(t);
 			} catch (error) {
-				console.warn(`[biblioteca] turma ignorada: ${describeProblema(`${codigo}/${nome}`, error)}`);
+				problemas.push(describeProblema(`${codigo}/${nome}`, error));
 			}
 		}
-		return out;
+		return { turmas, problemas };
 	},
 
 	readTurma(codigo, turmaId) {

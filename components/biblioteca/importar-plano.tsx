@@ -21,6 +21,11 @@ interface Rascunho {
 	existente: { materia: boolean; turma: boolean };
 }
 
+/** Só o 409 de turma repetida pede para substituir; outro 409 (ex.: formato mais novo) é erro. */
+export function ehConflitoDeTurma(status: number, body: { code?: unknown } | null): boolean {
+	return status === 409 && body?.code === "turma_existe";
+}
+
 const custo = (usd: number | null) => (usd === null ? "custo desconhecido" : `custo estimado US$ ${usd.toFixed(usd < 0.01 ? 4 : 2).replace(".", ",")}`);
 
 export function ImportarPlanoScreen() {
@@ -58,8 +63,11 @@ export function ImportarPlanoScreen() {
 			form.append("plano", arquivo);
 			const res = await fetch("/api/biblioteca/plano", { method: "POST", body: form });
 			if (res.status === 409) {
-				setEstado("confirmar");
-				return;
+				const body = (await res.clone().json().catch(() => null)) as { code?: unknown } | null;
+				if (ehConflitoDeTurma(res.status, body) && !substituir) {
+					setEstado("confirmar");
+					return;
+				}
 			}
 			const ok = await lerResposta<{ codigo: string; turma: string }>(res);
 			router.push(`/biblioteca/${encodeURIComponent(ok.codigo)}/${encodeURIComponent(ok.turma)}`);

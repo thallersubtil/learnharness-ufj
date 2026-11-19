@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { BibliotecaHome } from "../components/biblioteca/biblioteca-home.tsx";
+import { ehConflitoDeTurma } from "../components/biblioteca/importar-plano.tsx";
 import { PlanoForm, comIdentidade } from "../components/biblioteca/plano-form.tsx";
 import { PreparacaoTela } from "../components/biblioteca/preparacao-view.tsx";
 import { UfjContextCard } from "../components/ufj-context-card.tsx";
@@ -127,5 +128,13 @@ describe("barra lateral", () => {
 		const html = renderToStaticMarkup(<BibliotecaNavButton active={false} onClick={noop} />);
 		assert.match(html, /Biblioteca/);
 		assert.match(html, /data-testid="nav-biblioteca"/);
+	});
+});
+
+describe("conflito ao salvar (revisão final, item 4)", () => {
+	it("só 409 turma_existe pede para substituir", () => {
+		assert.equal(ehConflitoDeTurma(409, { code: "turma_existe" }), true);
+		assert.equal(ehConflitoDeTurma(409, { code: "formato_mais_novo" }), false);
+		assert.equal(ehConflitoDeTurma(400, { code: "turma_existe" }), false);
 	});
 });

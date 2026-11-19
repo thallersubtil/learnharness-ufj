@@ -158,3 +158,15 @@ describe("editar matéria e turma", () => {
 		assert.equal((await server.turmaGetRoute("ICE0001", "2025-1-ninguem", svc)).status, 404);
 	});
 });
+
+describe("problemas visíveis (revisão final, item 4)", () => {
+	it("uma turma corrompida aparece nos problemas em vez de sumir", async () => {
+		await server.salvarPlanoRoute(planoRequest({ ...rascunho(), substituir: false }), svc);
+		const dir = path.join(TMP_DATA, "biblioteca/materias/ICE0001/turmas/2025-1-outra-pessoa");
+		fs.mkdirSync(dir, { recursive: true });
+		fs.writeFileSync(path.join(dir, "turma.json"), "{ quebrado");
+		const lista = await (await server.listarRoute(svc)).json();
+		assert.deepEqual(lista.materias[0].turmas.map((t: Turma) => t.id), ["2026-2-prof-exemplo"]);
+		assert.ok(lista.problemas.some((p: string) => p.startsWith("ICE0001/2025-1-outra-pessoa")), JSON.stringify(lista.problemas));
+	});
+});

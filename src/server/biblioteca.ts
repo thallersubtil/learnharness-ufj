@@ -82,7 +82,13 @@ export function createBibliotecaService(deps: BibliotecaServiceDeps) {
 	return {
 		listar(): BibliotecaListagem {
 			const { materias, problemas } = biblioteca.listMaterias();
-			return { materias: materias.map((materia) => ({ materia, turmas: biblioteca.listTurmas(materia.codigo) })), problemas };
+			const todos = [...problemas];
+			const lista = materias.map((materia) => {
+				const r = biblioteca.listTurmasComProblemas(materia.codigo);
+				todos.push(...r.problemas);
+				return { materia, turmas: r.turmas };
+			});
+			return { materias: lista, problemas: todos };
 		},
 
 		lerMateria(codigo: string): { materia: Materia; turmas: Turma[] } {

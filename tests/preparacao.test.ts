@@ -134,6 +134,14 @@ describe("preparacaoView", () => {
 		assert.equal(server.preparacaoView(ref, hoje).horas, null);
 	});
 
+	it("turma de formato mais novo é dita como tal, não como desconhecida (revisão final, item 4)", () => {
+		const dir = path.join(TMP_DATA, "biblioteca/materias/ICE0001/turmas/2030-1-futuro");
+		fs.mkdirSync(dir, { recursive: true });
+		fs.writeFileSync(path.join(dir, "turma.json"), JSON.stringify({ ...turmaValida(), id: "2030-1-futuro", formato: 2 }));
+		assert.throws(() => server.preparacaoView({ materia: "ICE0001", turma: "2030-1-futuro", avaliacao: "N1" }, hoje), core.BibliotecaFormatoError);
+		assert.throws(() => server.ufjMarkerFor({ materia: "ICE0001", turma: "2030-1-futuro", avaliacao: "N1", topico: "t1" }), core.BibliotecaFormatoError);
+	});
+
 	it("GET pela rota devolve a view; sem parâmetros dá 400", async () => {
 		const ok = await server.preparacaoGetRoute(new Request(`http://localhost/api/biblioteca/preparacao?materia=ICE0001&turma=${ref.turma}&avaliacao=N3`));
 		assert.equal(ok.status, 200);

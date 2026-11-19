@@ -299,6 +299,8 @@ export interface BibliotecaStore {
 	readMateria(codigo: string): Materia | null;
 	writeMateria(m: Materia): void;
 	listTurmas(codigo: string): Turma[];
+	/** Turmas válidas e, em texto, as que não puderam ser lidas (corrompidas ou de formato mais novo). */
+	listTurmasComProblemas(codigo: string): { turmas: Turma[]; problemas: string[] };
 	readTurma(codigo: string, turmaId: string): Turma | null;
 	writeTurma(codigo: string, t: Turma, planoPdf?: Uint8Array): void;
 	/** `{formato: 1, arquivos: []}` quando o arquivo não existe. */
