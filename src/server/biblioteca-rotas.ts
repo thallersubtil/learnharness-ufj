@@ -197,3 +197,37 @@ export async function preparacaoPutRoute(request: Request): Promise<Response> {
 		return respostaDeErro(err);
 	}
 }
+
+// ─── provas: data, nova prova e conteúdo (spec SIGAA §7.5–7.6) ───────────────
+
+/** PUT .../avaliacoes/[avaliacao] — `{ data?: string | null; topicos?: string[] }` (ao menos um). */
+export async function provaPutRoute(request: Request, codigo: string, turmaId: string, avaliacaoId: string, svc: BibliotecaService = bibliotecaService): Promise<Response> {
+	const body = await lerJson(request);
+	if (body instanceof Response) return body;
+	const b = (body && typeof body === "object" ? body : {}) as { data?: unknown; topicos?: unknown };
+	const temData = "data" in b;
+	const temTopicos = "topicos" in b;
+	if (!temData && !temTopicos) return Response.json({ error: "Informe a data ou os tópicos da prova." }, { status: 400 });
+	if (temData && b.data !== null && typeof b.data !== "string") return Response.json({ error: "Informe a data no formato AAAA-MM-DD." }, { status: 400 });
+	if (temTopicos && (!Array.isArray(b.topicos) || b.topicos.some((t) => typeof t !== "string"))) return Response.json({ error: "Os tópicos precisam ser uma lista de ids." }, { status: 400 });
+	try {
+		let turma = temData ? svc.definirData(codigo, turmaId, avaliacaoId, b.data as string | null) : undefined;
+		if (temTopicos) turma = svc.definirEscopo(codigo, turmaId, avaliacaoId, b.topicos as string[]);
+		return Response.json(turma);
+	} catch (err) {
+		return respostaDeErro(err);
+	}
+}
+
+/** POST .../avaliacoes — `{ nome: string; data?: string }`. */
+export async function provaPostRoute(request: Request, codigo: string, turmaId: string, svc: BibliotecaService = bibliotecaService): Promise<Response> {
+	const body = await lerJson(request);
+	if (body instanceof Response) return body;
+	const b = (body && typeof body === "object" ? body : {}) as { nome?: unknown; data?: unknown };
+	if (b.data !== undefined && typeof b.data !== "string") return Response.json({ error: "Informe a data no formato AAAA-MM-DD." }, { status: 400 });
+	try {
+		return Response.json(svc.adicionarProva(codigo, turmaId, { nome: typeof b.nome === "string" ? b.nome : "", ...(typeof b.data === "string" && b.data ? { data: b.data } : {}) }));
+	} catch (err) {
+		return respostaDeErro(err);
+	}
+}

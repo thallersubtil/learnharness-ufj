@@ -16,6 +16,7 @@ import {
 	type Turma,
 } from "../core/biblioteca.ts";
 import { arquivarRemovidos, topicosReferenciados } from "../core/biblioteca-escopo.ts";
+import { adicionarProva as adicionarProvaNaTurma, definirDataProva, definirEscopoProva } from "../core/provas.ts";
 import type { BibliotecaStore } from "../core/ports.ts";
 import { MAX_IMPORT_BYTES } from "../../lib/notes-import-limits.ts";
 import { stores } from "./stores.ts";
@@ -192,7 +193,39 @@ export function createBibliotecaService(deps: BibliotecaServiceDeps) {
 			biblioteca.writeTurma(codigo, limpa);
 			return limpa;
 		},
+
+		/** Mudar a data de uma prova com um clique (spec SIGAA §7.5); `null` apaga. */
+		definirData(codigo: string, turmaId: string, avaliacaoId: string, data: string | null): Turma {
+			const { turma } = turmaExistente(codigo, turmaId);
+			const nova = definirDataProva(turma, avaliacaoId, data);
+			biblioteca.writeTurma(codigo, nova);
+			return nova;
+		},
+
+		/** Uma prova criada pelo aluno. */
+		adicionarProva(codigo: string, turmaId: string, entrada: { nome: string; data?: string }): Turma {
+			const { turma } = turmaExistente(codigo, turmaId);
+			const nova = adicionarProvaNaTurma(turma, entrada);
+			biblioteca.writeTurma(codigo, nova);
+			return nova;
+		},
+
+		/** O que o aluno quer que caia na prova (só tópicos ativos da matéria). */
+		definirEscopo(codigo: string, turmaId: string, avaliacaoId: string, topicos: string[]): Turma {
+			const { materia, turma } = turmaExistente(codigo, turmaId);
+			for (const id of topicos) if (!materia.topicos.some((t) => t.id === id && !t.arquivado)) throw new BibliotecaEntradaError(`Tópico desconhecido: "${id}".`);
+			const nova = definirEscopoProva(turma, avaliacaoId, topicos);
+			biblioteca.writeTurma(codigo, nova);
+			return nova;
+		},
 	};
+
+	function turmaExistente(codigo: string, turmaId: string): { materia: Materia; turma: Turma } {
+		const materia = biblioteca.readMateria(codigo);
+		const turma = materia ? biblioteca.readTurma(codigo, turmaId) : null;
+		if (!materia || !turma) throw new BibliotecaNaoEncontradaError("Turma não encontrada.");
+		return { materia, turma };
+	}
 }
 
 export type BibliotecaService = ReturnType<typeof createBibliotecaService>;
