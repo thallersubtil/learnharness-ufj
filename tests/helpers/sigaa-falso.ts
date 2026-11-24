@@ -21,8 +21,10 @@ export interface OpcoesSigaaFalso {
 	avisoDepoisDoLogin?: boolean;
 	/** Depois de N páginas internas, a sessão cai (o SIGAA volta para a tela de login). */
 	derrubarSessaoDepois?: number;
-	/** Rótulo de menu cuja página responde 500. */
-	secaoQuebrada?: string;
+	/** Seção de uma turma cuja página responde 500. */
+	secaoQuebrada?: { idTurma: string; rotulo: string };
+	/** Cada página de Arquivos só aceita um download (como uma visão JSF que expira). */
+	umDownloadPorPagina?: boolean;
 	/** Chamado antes de servir cada página interna (caminho e, para seções, o rótulo). */
 	aoServir?: (caminho: string, rotulo?: string) => void;
 }
@@ -47,6 +49,8 @@ interface Sessao {
 	contador: number;
 	viewStates: string[];
 	turma?: string;
+	/** Downloads feitos a partir de cada ViewState. */
+	downloads: Map<string, number>;
 }
 
 /** Lê o corpo x-www-form-urlencoded como o servidor Java lê: bytes em ISO-8859-1. */
@@ -108,7 +112,7 @@ export async function iniciarSigaaFalso(opcoes: OpcoesSigaaFalso = {}): Promise<
 
 			if (caminho === "/sigaa/verTelaLogin.do") {
 				if (!s) {
-					s = { id: `${randomBytes(8).toString("hex").toUpperCase()}.srv1inst1`, logado: false, caiu: false, internos: 0, contador: 0, viewStates: [] };
+					s = { id: `${randomBytes(8).toString("hex").toUpperCase()}.srv1inst1`, logado: false, caiu: false, internos: 0, contador: 0, viewStates: [], downloads: new Map() };
 					sessoes.set(s.id, s);
 					res.setHeader("Set-Cookie", `JSESSIONID=${s.id}; Path=/sigaa; HttpOnly`);
 				}
@@ -147,7 +151,7 @@ export async function iniciarSigaaFalso(opcoes: OpcoesSigaaFalso = {}): Promise<
 				opcoes.aoServir?.(caminho);
 				return html("portal.html");
 			}
-			const extra = tratarTurma({ req, caminho, form, s, viewStateValido, html, opcoes });
+			const extra = tratarTurma({ req, caminho, form, s, viewStateValido, html, opcoes, res });
 			if (extra) return;
 			res.writeHead(404, { "Content-Type": "text/plain" });
 			res.end("não encontrado");
@@ -171,9 +175,85 @@ interface ContextoTurma {
 	viewStateValido: () => boolean;
 	html: (arquivo: string, troca?: Record<string, string>, status?: number) => void;
 	opcoes: OpcoesSigaaFalso;
+	res: http.ServerResponse;
 }
 
-/** As páginas de dentro das turmas (Tarefa 6). Devolve true se respondeu. */
-function tratarTurma(_c: ContextoTurma): boolean {
+/** Os itens do menu das páginas de exemplo: sufixo da chave → rótulo. */
+export const MENU_FALSO: Record<string, string> = {
+	"81": "Principal", "82": "Plano de Ensino", "83": "Participantes", "84": "Notícias", "85": "Frequência", "86": "Ver Notas",
+	"87": "Fóruns", "88": "Referências", "89": "Arquivos", "90": "Avaliações", "91": "Tarefas", "92": "Questionários",
+};
+
+const NOTEBOOK = JSON.stringify({
+	cells: [
+		{ cell_type: "markdown", source: ["# Exemplos\n", "Derivadas com a regra da cadeia."] },
+		{ cell_type: "code", source: ["def derivada(x):\n", "    return 2 * x"], outputs: [{ output_type: "stream", text: ["SAIDA_GRANDE ".repeat(50)] }] },
+	],
+	metadata: { kernelspec: { language: "python" } },
+});
+
+/** Os arquivos das páginas de exemplo, pelo id do download. */
+const ARQUIVOS_FALSOS: Record<string, { nome: string; tipo: string; corpo: Buffer }> = {
+	"5001": { nome: "Aula_1_Limites.pdf", tipo: "application/pdf", corpo: Buffer.from("%PDF-1.4 limites") },
+	"5002": { nome: "Lista_regra_da_cadeia.pdf", tipo: "application/pdf", corpo: Buffer.from("%PDF-1.4 lista") },
+	"5003": { nome: "Exemplos.ipynb", tipo: "application/octet-stream", corpo: Buffer.from(NOTEBOOK) },
+	"5004": { nome: "Ficha de avaliação.docx", tipo: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", corpo: Buffer.from("PK ficha") },
+	"6001": { nome: "Aula_1_Introducao.pdf", tipo: "application/pdf", corpo: Buffer.from("%PDF-1.4 introducao") },
+};
+
+const PAGINAS: Record<string, { principal: string; avaliacoes: string; arquivos: string }> = {
+	"1001": { principal: "turma-principal.html", avaliacoes: "turma-avaliacoes.html", arquivos: "turma-arquivos.html" },
+	"1002": { principal: "turma2-principal.html", avaliacoes: "turma-avaliacoes-vazia.html", arquivos: "turma2-arquivos.html" },
+};
+
+/** As páginas de dentro das turmas. Devolve true se respondeu. */
+function tratarTurma(c: ContextoTurma): boolean {
+	const { req, caminho, form, s, opcoes, res } = c;
+	if (req.method !== "POST") return false;
+	// Abrir a turma: o formulário da lista de turmas do portal.
+	if (caminho === "/sigaa/portais/discente/discente.jsf" && form.has("form_acessarTurmaVirtual:turmaVirtual")) {
+		const id = form.get("idTurma") ?? "";
+		if (!c.viewStateValido() || !PAGINAS[id]) {
+			c.html("portal.html");
+			return true;
+		}
+		s.turma = id;
+		opcoes.aoServir?.(caminho, "Principal");
+		c.html(PAGINAS[id]!.principal);
+		return true;
+	}
+	const paginas = s.turma ? PAGINAS[s.turma] : undefined;
+	// Itens do menu da turma.
+	if (caminho === "/sigaa/ava/index.jsf" && form.has("formMenu") && paginas) {
+		const chave = [...form.keys()].find((k) => /^formMenu:j_id_jsp_1_\d+$/.test(k) && form.get(k) === k && k !== "formMenu:j_id_jsp_1_44");
+		const rotulo = chave ? MENU_FALSO[chave.slice("formMenu:j_id_jsp_1_".length)] : undefined;
+		if (!c.viewStateValido() || !rotulo) {
+			c.html(paginas.principal);
+			return true;
+		}
+		opcoes.aoServir?.(caminho, rotulo);
+		if (opcoes.secaoQuebrada && opcoes.secaoQuebrada.idTurma === s.turma && opcoes.secaoQuebrada.rotulo === rotulo) {
+			res.writeHead(500, { "Content-Type": "text/html;charset=ISO-8859-1" });
+			res.end("erro interno");
+			return true;
+		}
+		c.html(rotulo === "Avaliações" ? paginas.avaliacoes : rotulo === "Arquivos" ? paginas.arquivos : paginas.principal);
+		return true;
+	}
+	// Download pela listagem de Arquivos.
+	if (caminho === "/sigaa/ava/ArquivoTurma/listar_discente.jsf" && form.has("formAva") && paginas) {
+		const vs = form.get("javax.faces.ViewState") ?? "";
+		const feitos = s.downloads.get(vs) ?? 0;
+		const arq = ARQUIVOS_FALSOS[form.get("id") ?? ""];
+		if (!c.viewStateValido() || !arq || (opcoes.umDownloadPorPagina && feitos >= 1)) {
+			c.html(paginas.principal);
+			return true;
+		}
+		s.downloads.set(vs, feitos + 1);
+		opcoes.aoServir?.(caminho, "download");
+		res.writeHead(200, { "Content-Type": arq.tipo, "Content-Disposition": `attachment; filename="${Buffer.from(arq.nome, "latin1").toString("latin1")}"` });
+		res.end(arq.corpo);
+		return true;
+	}
 	return false;
 }
