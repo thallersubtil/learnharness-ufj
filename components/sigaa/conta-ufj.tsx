@@ -12,7 +12,7 @@ import type { EstadoSigaa } from "@/src/core";
 import { useServerEvent } from "@/components/server-events";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Aviso, BibliotecaPagina, lerResposta } from "@/components/biblioteca/comum";
+import { Aviso, BibliotecaPagina, VoltarParaMaterias, lerResposta } from "@/components/biblioteca/comum";
 
 const SENHA_RECUSADA = "O SIGAA recusou a senha guardada. Conecte a conta de novo.";
 
@@ -158,7 +158,7 @@ export function ContaUfjScreen() {
 	}
 
 	return (
-		<BibliotecaPagina titulo="Conta UFJ" acoes={<Link href="/biblioteca" className="text-sm text-muted-foreground hover:underline">Matérias</Link>}>
+		<BibliotecaPagina titulo="Conta UFJ" acoes={<VoltarParaMaterias />}>
 			{!estado && !erro && <p className="text-sm text-muted-foreground">Carregando…</p>}
 			{!estado && erro && <Aviso tom="erro">{erro}</Aviso>}
 			{estado && (

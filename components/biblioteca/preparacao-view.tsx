@@ -109,6 +109,11 @@ export function PreparacaoTela({ view, onAprender, onPraticar, onHoras, onData, 
 	);
 }
 
+/** "Preparação · 2ª unidade": o nome da prova, nunca o id interno ("sigaa-7001"). */
+export function tituloPreparacao(view: PreparacaoView | null): string {
+	return view ? `Preparação · ${view.avaliacao.nome}` : "Preparação";
+}
+
 export function PreparacaoScreen({ codigo, turmaId, avaliacaoId }: { codigo: string; turmaId: string; avaliacaoId: string }) {
 	const router = useRouter();
 	const starter = useRef(new SessionStarter());
@@ -167,7 +172,7 @@ export function PreparacaoScreen({ codigo, turmaId, avaliacaoId }: { codigo: str
 
 	return (
 		<BibliotecaPagina
-			titulo={view ? `Preparação · ${view.avaliacao.id}` : "Preparação"}
+			titulo={tituloPreparacao(view)}
 			acoes={<Link href={`/biblioteca/${encodeURIComponent(codigo)}/${encodeURIComponent(turmaId)}`} className="text-sm text-muted-foreground hover:underline">{view?.materia.nome ?? "Turma"}</Link>}
 		>
 			{erro && <Aviso tom="erro">{erro}</Aviso>}

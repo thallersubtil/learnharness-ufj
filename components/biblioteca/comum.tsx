@@ -6,6 +6,7 @@
  * rotas com a mensagem de erro em português.
  */
 
+import Link from "next/link";
 import type { ReactNode } from "react";
 import { TopBar } from "@/components/top-bar";
 
@@ -30,6 +31,11 @@ export function BibliotecaPagina({ titulo, acoes, children }: { titulo: string; 
 			</div>
 		</div>
 	);
+}
+
+/** O link de volta para a tela Matérias (antiga Biblioteca). */
+export function VoltarParaMaterias() {
+	return <Link href="/biblioteca" className="text-sm text-muted-foreground hover:underline">Matérias</Link>;
 }
 
 export function Aviso({ children, tom = "aviso" }: { children: ReactNode; tom?: "aviso" | "erro" }) {

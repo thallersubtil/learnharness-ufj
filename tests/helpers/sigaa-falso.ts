@@ -25,6 +25,8 @@ export interface OpcoesSigaaFalso {
 	secaoQuebrada?: { idTurma: string; rotulo: string };
 	/** Cada página de Arquivos só aceita um download (como uma visão JSF que expira). */
 	umDownloadPorPagina?: boolean;
+	/** Porta fixa (só para o script de desenvolvimento); sem ela, uma porta livre. */
+	porta?: number;
 	/** Chamado antes de servir cada página interna (caminho e, para seções, o rótulo). */
 	aoServir?: (caminho: string, rotulo?: string) => void;
 }
@@ -158,7 +160,7 @@ export async function iniciarSigaaFalso(opcoes: OpcoesSigaaFalso = {}): Promise<
 		});
 	});
 
-	await new Promise<void>((ok) => servidor.listen(0, "127.0.0.1", ok));
+	await new Promise<void>((ok) => servidor.listen(opcoes.porta ?? 0, "127.0.0.1", ok));
 	const { port } = servidor.address() as AddressInfo;
 	return {
 		base: `http://127.0.0.1:${port}`,

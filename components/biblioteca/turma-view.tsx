@@ -10,7 +10,7 @@ import { useCallback, useEffect, useState } from "react";
 import { TIPOS_COM_ESCOPO, diasAte, formatarData, type Materia, type Referencias, type Turma } from "@/src/core";
 import { useServerEvent } from "@/components/server-events";
 import { Button } from "@/components/ui/button";
-import { Aviso, BibliotecaPagina, Secao, lerResposta, textoDias } from "./comum";
+import { Aviso, BibliotecaPagina, Secao, VoltarParaMaterias, lerResposta, textoDias } from "./comum";
 import { MateriaisForm } from "./materiais-form";
 import { PlanoForm } from "./plano-form";
 import { ProvasSigaa, type AcoesProvas } from "./provas-sigaa";
@@ -128,7 +128,7 @@ export function TurmaScreen({ codigo, turmaId }: { codigo: string; turmaId: stri
 	}
 
 	return (
-		<BibliotecaPagina titulo={dados?.materia.nome ?? "Turma"} acoes={<Link href="/biblioteca" className="text-sm text-muted-foreground hover:underline">Biblioteca</Link>}>
+		<BibliotecaPagina titulo={dados?.materia.nome ?? "Turma"} acoes={<VoltarParaMaterias />}>
 			{erro && <Aviso tom="erro">{erro}</Aviso>}
 			{!dados && !erro && <p className="text-sm text-muted-foreground">Carregando…</p>}
 			{dados && !edicao && (

@@ -9,7 +9,8 @@ import { describe, it } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { DataEditavel } from "../components/biblioteca/data-editavel.tsx";
 import { TurmaView } from "../components/biblioteca/turma-view.tsx";
-import { PreparacaoTela } from "../components/biblioteca/preparacao-view.tsx";
+import { PreparacaoTela, tituloPreparacao } from "../components/biblioteca/preparacao-view.tsx";
+import { VoltarParaMaterias } from "../components/biblioteca/comum.tsx";
 import { montarDoSigaa, type PreparacaoView, type Referencias } from "../src/core/index.ts";
 import { materiaValida, turmaValida } from "./helpers/biblioteca-fixtures.ts";
 
@@ -105,5 +106,19 @@ describe("preparação com data editável", () => {
 		assert.match(html, /do SIGAA/);
 		assert.match(html, /Disciplina Teste/);
 		assert.doesNotMatch(html, /Disciplina Teste · </);
+	});
+});
+
+describe("nomes nas telas (verificação no navegador)", () => {
+	it("o título da preparação usa o nome da prova, não o id", () => {
+		const view = { avaliacao: { id: "sigaa-7001", nome: "2ª unidade" } } as unknown as PreparacaoView;
+		assert.equal(tituloPreparacao(view), "Preparação · 2ª unidade");
+		assert.equal(tituloPreparacao(null), "Preparação");
+	});
+
+	it("o link de volta diz Matérias", () => {
+		const html = renderToStaticMarkup(<VoltarParaMaterias />);
+		assert.match(html, /href="\/biblioteca"/);
+		assert.match(html, />Matérias</);
 	});
 });
