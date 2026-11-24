@@ -27,7 +27,7 @@ const turmaComN2 = () => ({
 describe("BibliotecaHome", () => {
 	it("vazia mostra o convite para importar", () => {
 		const html = renderToStaticMarkup(<BibliotecaHome materias={[]} problemas={[]} hoje={new Date(2026, 10, 18)} />);
-		assert.match(html, /Sua biblioteca está vazia\. Comece importando o plano de ensino de uma matéria\./);
+		assert.match(html, /Nenhuma matéria ainda\. Conecte sua conta UFJ ou importe um plano de ensino\./);
 		assert.match(html, /href="\/biblioteca\/importar"/);
 		assert.match(html, /Importar plano de ensino/);
 	});
@@ -124,9 +124,9 @@ describe("UfjContextCard", () => {
 });
 
 describe("barra lateral", () => {
-	it("o botão Biblioteca aparece", () => {
+	it("o botão Matérias aparece", () => {
 		const html = renderToStaticMarkup(<BibliotecaNavButton active={false} onClick={noop} />);
-		assert.match(html, /Biblioteca/);
+		assert.match(html, /Matérias/);
 		assert.match(html, /data-testid="nav-biblioteca"/);
 	});
 });

@@ -977,14 +977,14 @@ export function BibliotecaNavButton({ active, onClick }: { active: boolean; onCl
 		<button
 			type="button"
 			data-testid="nav-biblioteca"
-			title="Biblioteca"
+			title="Matérias"
 			aria-current={active ? "page" : undefined}
 			onClick={onClick}
 			className={`flex min-w-0 w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-xs uppercase tracking-wider transition-colors hover:bg-accent hover:text-foreground ${active ? "bg-accent text-foreground" : "text-muted-foreground"}`}
 		>
 			<LibraryIcon className="size-3 shrink-0" />
-			<span className="min-w-0 truncate">Biblioteca</span>
-			<span className="sr-only">abrir a biblioteca UFJ</span>
+			<span className="min-w-0 truncate">Matérias</span>
+			<span className="sr-only">abrir as matérias do semestre</span>
 		</button>
 	);
 }
