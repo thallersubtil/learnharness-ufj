@@ -94,9 +94,17 @@ export function aplicarEscopoManual(calculado: string[], manual?: Avaliacao["esc
  *  Turma sem `sigaa` (plano importado) volta igual: lá o escopo é escolhido à mão. */
 export function recalcularTurma(turma: Turma): Turma {
 	if (!turma.sigaa) return turma;
-	const numeradas = computePosicoes(turma.avaliacoes, turma.aulas);
-	const { avaliacoes } = computeEscopos(numeradas, turma.aulas);
-	return { ...turma, avaliacoes: avaliacoes.map((a) => ({ ...a, escopo: { topicos: aplicarEscopoManual(a.escopo.topicos, a.escopoManual) } })) };
+	// Cada aula de prova do SIGAA se liga à prova regular da mesma data, refeito a
+	// cada mudança: mudar a data de uma prova desfaz (ou faz) a ligação na hora.
+	const aulas = turma.aulas.map((a) => {
+		if (!a.sigaa?.prova) return a;
+		const { avaliacaoId: _antiga, ...resto } = a;
+		const ligada = a.data ? turma.avaliacoes.find((av) => REGULARES.has(av.tipo) && av.data === a.data) : undefined;
+		return ligada ? { ...resto, avaliacaoId: ligada.id } : resto;
+	});
+	const numeradas = computePosicoes(turma.avaliacoes, aulas);
+	const { avaliacoes } = computeEscopos(numeradas, aulas);
+	return { ...turma, aulas, avaliacoes: avaliacoes.map((a) => ({ ...a, escopo: { topicos: aplicarEscopoManual(a.escopo.topicos, a.escopoManual) } })) };
 }
 
 export interface TopicoProposto {

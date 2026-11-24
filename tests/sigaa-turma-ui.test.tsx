@@ -7,7 +7,7 @@ import React from "react";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { DataEditavel } from "../components/biblioteca/data-editavel.tsx";
+import { DataEditavel, decidirData } from "../components/biblioteca/data-editavel.tsx";
 import { TurmaView } from "../components/biblioteca/turma-view.tsx";
 import { PreparacaoTela, tituloPreparacao } from "../components/biblioteca/preparacao-view.tsx";
 import { VoltarParaMaterias } from "../components/biblioteca/comum.tsx";
@@ -49,6 +49,14 @@ describe("DataEditavel", () => {
 		assert.match(aberta, /value="2026-09-10"/);
 		assert.match(aberta, /A próxima sincronização com o SIGAA troca esta data\./);
 		assert.match(aberta, />Limpar</);
+	});
+
+	it("campo vazio ou data incompleta não apagam a data (revisão final, #12)", () => {
+		assert.deepEqual(decidirData("", "2026-09-10"), { salvar: false });
+		assert.deepEqual(decidirData("2026-1", "2026-09-10"), { salvar: false });
+		assert.deepEqual(decidirData("2026-09-10", "2026-09-10"), { salvar: false });
+		assert.deepEqual(decidirData("2026-12-03", "2026-09-10"), { salvar: true, nova: "2026-12-03" });
+		assert.deepEqual(decidirData("2026-12-03", undefined), { salvar: true, nova: "2026-12-03" });
 	});
 
 	it("à mão, do plano e sem data", () => {

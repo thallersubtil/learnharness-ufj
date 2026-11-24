@@ -41,6 +41,16 @@ describe("login no SIGAA", () => {
 		assert.equal(corpoLatin1([["a b", "ç&"]]), "a+b=%E7%26");
 	});
 
+	it("recusa sem formulário nem mensagem ainda conta como senha recusada (revisão final, #8)", async () => {
+		const f = await falso({ recusaSilenciosa: true });
+		await assert.rejects(entrar(sessao(f.base), "aluno.teste", "errada"), SigaaSenhaRecusadaError);
+		assert.equal(f.pedidos.filter((p) => p.metodo === "POST" && p.caminho.startsWith("/sigaa/logar.do")).length, 1);
+	});
+
+	it("caracteres do windows-1252 vão como o navegador manda (revisão final, #17)", () => {
+		assert.equal(corpoLatin1([["s", "€“”–"]]), "s=%80%93%94%96");
+	});
+
 	it("recusa redirecionamento para outro host", async () => {
 		const fetchFalso = (async () => new Response(null, { status: 302, headers: { Location: "https://outro.exemplo/roubar" } })) as typeof fetch;
 		const s = new SigaaSessao({ base: "https://sigaa.exemplo", esperarMs: 0, fetch: fetchFalso });

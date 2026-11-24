@@ -50,6 +50,8 @@ export interface ArquivoBaixado {
 }
 
 export interface LeituraDoSigaa {
+	/** Quantas turmas o portal mostrou (0: o portal veio sem a lista). */
+	turmasNoPortal: number;
 	turmasLidas: number;
 	falhas: { idTurma: string; nome: string; erro: string }[];
 }
@@ -171,5 +173,5 @@ export async function lerSigaa(sessao: SigaaSessao, portal: Pagina, opcoes: Opco
 		}
 		for (const erro of avisos) falhas.push({ idTurma: t.idTurma, nome: t.nome, erro });
 	}
-	return { turmasLidas, falhas };
+	return { turmasNoPortal: turmas.length, turmasLidas, falhas };
 }

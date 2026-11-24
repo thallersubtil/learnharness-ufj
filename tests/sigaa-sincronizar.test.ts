@@ -10,7 +10,8 @@ const TMP = fs.mkdtempSync(path.join(os.tmpdir(), "lh-sigaa-sync-"));
 process.env.LH_DATA_DIR = TMP;
 after(() => fs.rmSync(TMP, { recursive: true, force: true }));
 
-const { createSincronizacao } = await import("../src/server/sigaa/sincronizar.ts");
+const { createSincronizacao, SigaaOcupadoError } = await import("../src/server/sigaa/sincronizar.ts");
+const { createBibliotecaService } = await import("../src/server/biblioteca.ts");
 const { sigaaEstadoRoute, sigaaConectarRoute, sigaaSairRoute, sigaaSincronizarRoute } = await import("../src/server/sigaa/rotas.ts");
 const { SigaaSessao } = await import("../src/server/sigaa/http.ts");
 const { bibliotecaStore } = await import("../src/store/biblioteca.ts");
@@ -33,10 +34,11 @@ beforeEach(() => {
 const TURMA = "2026-2-turma-ta";
 let emitidos = 0;
 
-async function montar(opcoes: OpcoesSigaaFalso = {}) {
+async function montar(opcoes: OpcoesSigaaFalso = {}, compartilhado?: { andamento: Promise<void> | null }) {
 	const f = await iniciarSigaaFalso(opcoes);
 	abertos.push(f);
 	const s = createSincronizacao({
+		...(compartilhado ? { compartilhado } : {}),
 		biblioteca: bibliotecaStore,
 		sigaa: sigaaStore,
 		cifrar: async (t) => `teste:${t}`,
@@ -155,13 +157,88 @@ describe("sincronização", () => {
 		const antes = bibliotecaStore.readTurma("ICE0001", TURMA);
 		const { f, s } = await montar({ derrubarSessaoDepois: 3 });
 		sigaaStore.writeConta({ usuario: "aluno.teste", senhaCifrada: "teste:segredo" });
+		sigaaStore.writeEstado({ situacao: "ocioso", usuario: "aluno.teste", ultimoSucesso: "2026-09-01T08:00:00.000Z", avisos: [] });
 		s.sincronizarAgora();
 		await s.emAndamento();
 		const e = s.estado();
-		assert.equal(e.situacao, "ocioso");
+		assert.equal(e.situacao, "erro", "nenhuma turma lida não é sucesso (revisão final, I7)");
+		assert.equal(e.erro, "Não consegui ler nenhuma turma do SIGAA nesta sincronização.");
+		assert.equal(e.ultimoSucesso, "2026-09-01T08:00:00.000Z", "o último sucesso continua o anterior");
 		assert.ok(e.avisos.some((a) => /^Não consegui ler Cálculo Teste: .*sessão/.test(a)), JSON.stringify(e.avisos));
 		assert.deepEqual(bibliotecaStore.readTurma("ICE0001", TURMA), antes);
 		assert.equal(posts(f), 1);
+	});
+
+	it("portal sem turmas é erro, não sucesso (revisão final, I7)", async () => {
+		const { s } = await montar({ portalSemTurmas: true });
+		await s.conectar("aluno.teste", "segredo");
+		await s.emAndamento();
+		assert.equal(s.estado().situacao, "erro");
+		assert.equal(s.estado().erro, "O SIGAA não mostrou nenhuma turma no portal.");
+		assert.equal(s.estado().ultimoSucesso, undefined);
+	});
+
+	it("Salvar materiais não faz baixar tudo de novo (revisão final, C2)", async () => {
+		const { f, s } = await montar();
+		await s.conectar("aluno.teste", "segredo");
+		await s.emAndamento();
+		const svc = createBibliotecaService({ biblioteca: bibliotecaStore, topicosEmSessoes: () => [] });
+		const refs = bibliotecaStore.readReferencias("ICE0001", TURMA).arquivos;
+		svc.salvarReferencias("ICE0001", TURMA, { arquivos: refs.map((a) => ({ arquivo: a.arquivo, topicos: a.topicos })) });
+		const depois = bibliotecaStore.readReferencias("ICE0001", TURMA).arquivos;
+		assert.ok(depois.every((a) => a.sigaaId), JSON.stringify(depois));
+		assert.equal(depois.find((a) => a.sigaaId === "5002")!.aula, 4);
+		const antes = downloads(f);
+		s.sincronizarAgora();
+		await s.emAndamento();
+		assert.equal(downloads(f), antes);
+	});
+
+	it("arquivo que perdeu o sigaaId recupera na sincronização (revisão final, C2)", async () => {
+		const { f, s } = await montar();
+		await s.conectar("aluno.teste", "segredo");
+		await s.emAndamento();
+		const r = bibliotecaStore.readReferencias("ICE0001", TURMA);
+		bibliotecaStore.writeReferencias("ICE0001", TURMA, { ...r, arquivos: r.arquivos.map(({ sigaaId: _s, ...a }) => a) });
+		s.sincronizarAgora();
+		await s.emAndamento();
+		assert.ok(bibliotecaStore.readReferencias("ICE0001", TURMA).arquivos.every((a) => a.sigaaId));
+		const antes = downloads(f);
+		s.sincronizarAgora();
+		await s.emAndamento();
+		assert.equal(downloads(f), antes);
+	});
+
+	it("leitura sem nenhum tópico mantém os dados da turma (revisão final, I3)", async () => {
+		const ok = await montar();
+		await ok.s.conectar("aluno.teste", "segredo");
+		await ok.s.emAndamento();
+		const antes = bibliotecaStore.readTurma("ICE0001", TURMA);
+		const { s } = await montar({ semTopicos: "1001" });
+		s.sincronizarAgora();
+		await s.emAndamento();
+		assert.deepEqual(bibliotecaStore.readTurma("ICE0001", TURMA), antes);
+		assert.ok(s.estado().avisos.some((a) => /^Não consegui ler Cálculo Teste: .*nenhum tópico de aula/.test(a)), JSON.stringify(s.estado().avisos));
+	});
+
+	it("conectar duas vezes ao mesmo tempo: a segunda recusa (revisão final, I6)", async () => {
+		const { f, s } = await montar();
+		const p1 = s.conectar("aluno.teste", "segredo");
+		await assert.rejects(s.conectar("aluno.teste", "segredo"), SigaaOcupadoError);
+		await p1;
+		await s.emAndamento();
+		assert.equal(posts(f), 1);
+	});
+
+	it("duas instâncias com o estado compartilhado veem a mesma sincronização (revisão final, I6)", async () => {
+		const compartilhado = { andamento: null as Promise<void> | null };
+		const a = await montar({}, compartilhado);
+		const b = await montar({}, compartilhado);
+		await a.s.conectar("aluno.teste", "segredo");
+		assert.equal(b.s.estado().situacao, "sincronizando");
+		b.s.sincronizarAgora();
+		assert.equal(posts(b.f), 0, "a segunda instância não abre outra sincronização");
+		await a.s.emAndamento();
 	});
 
 	it("senha guardada recusada: senha-recusada e não tenta de novo", async () => {

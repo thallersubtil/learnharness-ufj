@@ -32,7 +32,7 @@ const baixouId = (f: SigaaFalso, id: string) => f.pedidos.some((p) => p.caminho.
 describe("navegar pelo SIGAA", () => {
 	it("lê as duas turmas com tópicos, avaliações e arquivos", async () => {
 		const { leitura, lidas } = await ler();
-		assert.deepEqual(leitura, { turmasLidas: 2, falhas: [] });
+		assert.deepEqual(leitura, { turmasNoPortal: 2, turmasLidas: 2, falhas: [] });
 		const [a, b] = lidas;
 		assert.equal(a!.lida.idTurma, "1001");
 		assert.equal(a!.lida.codigo, "ICE0001");

@@ -13,6 +13,14 @@ import { Input } from "@/components/ui/input";
 
 const SELOS: Record<OrigemData, string> = { sigaa: "do SIGAA", manual: "à mão", plano: "do plano" };
 
+/** Sair do campo só salva uma data completa e diferente: campo vazio ou data pela
+ *  metade nunca apagam a data (só o "Limpar" apaga). */
+export function decidirData(valor: string, data?: string): { salvar: false } | { salvar: true; nova: string } {
+	const v = valor.trim();
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || v === data) return { salvar: false };
+	return { salvar: true, nova: v };
+}
+
 export function DataEditavel({ data, origem, onSalvar, editandoInicial = false }: {
 	data?: string;
 	origem?: OrigemData;
@@ -46,8 +54,8 @@ export function DataEditavel({ data, origem, onSalvar, editandoInicial = false }
 	const salvar = () => {
 		if (cancelado.current) return;
 		setEditando(false);
-		const novo = valor.trim() || null;
-		if (novo !== (data ?? null)) onSalvar(novo);
+		const d = decidirData(valor, data);
+		if (d.salvar) onSalvar(d.nova);
 	};
 
 	return (

@@ -13,6 +13,7 @@ import {
 	parseMateria,
 	parseTurma,
 	type Materia,
+	type Referencias,
 	type Turma,
 } from "../core/biblioteca.ts";
 import { arquivarRemovidos, topicosReferenciados } from "../core/biblioteca-escopo.ts";
@@ -141,6 +142,8 @@ export function createBibliotecaService(deps: BibliotecaServiceDeps) {
 			if (!Array.isArray(lista)) throw new BibliotecaEntradaError("Envie a lista de arquivos com seus tópicos.");
 			const conhecidos = new Set(materia.topicos.map((t) => t.id));
 			const ativos = new Set(materia.topicos.filter((t) => !t.arquivado).map((t) => t.id));
+			// O que o SIGAA sabe de cada arquivo (id, aula, título) não vem do formulário: fica.
+			const antes = new Map(biblioteca.readReferencias(codigo, turmaId).arquivos.map((a) => [a.arquivo, a]));
 			const arquivos = lista.map((x) => {
 				const e = x as { arquivo?: unknown; titulo?: unknown; topicos?: unknown };
 				if (typeof e?.arquivo !== "string") throw new BibliotecaEntradaError("Cada item precisa do nome do arquivo.");
@@ -149,8 +152,12 @@ export function createBibliotecaService(deps: BibliotecaServiceDeps) {
 				const topicos = Array.isArray(e.topicos) ? e.topicos : [];
 				for (const id of topicos) if (typeof id !== "string" || !conhecidos.has(id)) throw new BibliotecaEntradaError(`O tópico "${String(id)}" não está na matéria.`);
 				// Tópicos arquivados saem do mapeamento em vez de travar o salvamento.
-				const entrada: { arquivo: string; titulo?: string; topicos: string[]; sha256: string } = { arquivo: e.arquivo, topicos: (topicos as string[]).filter((id) => ativos.has(id)), sha256 };
+				const anterior = antes.get(e.arquivo);
+				const entrada: Referencias["arquivos"][number] = { arquivo: e.arquivo, topicos: (topicos as string[]).filter((id) => ativos.has(id)), sha256 };
 				if (typeof e.titulo === "string" && e.titulo.trim()) entrada.titulo = e.titulo.trim();
+				else if (anterior?.titulo) entrada.titulo = anterior.titulo;
+				if (anterior?.sigaaId) entrada.sigaaId = anterior.sigaaId;
+				if (anterior?.aula !== undefined) entrada.aula = anterior.aula;
 				return entrada;
 			});
 			biblioteca.writeReferencias(codigo, turmaId, { formato: 1, arquivos });
@@ -213,8 +220,10 @@ export function createBibliotecaService(deps: BibliotecaServiceDeps) {
 		/** O que o aluno quer que caia na prova (só tópicos ativos da matéria). */
 		definirEscopo(codigo: string, turmaId: string, avaliacaoId: string, topicos: string[]): Turma {
 			const { materia, turma } = turmaExistente(codigo, turmaId);
-			for (const id of topicos) if (!materia.topicos.some((t) => t.id === id && !t.arquivado)) throw new BibliotecaEntradaError(`Tópico desconhecido: "${id}".`);
-			const nova = definirEscopoProva(turma, avaliacaoId, topicos);
+			for (const id of topicos) if (!materia.topicos.some((t) => t.id === id)) throw new BibliotecaEntradaError(`Tópico desconhecido: "${id}".`);
+			// Tópicos arquivados saem da escolha em vez de travar o salvamento.
+			const ativos = topicos.filter((id) => materia.topicos.some((t) => t.id === id && !t.arquivado));
+			const nova = definirEscopoProva(turma, avaliacaoId, ativos);
 			biblioteca.writeTurma(codigo, nova);
 			return nova;
 		},

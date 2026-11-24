@@ -4,7 +4,7 @@
  * sem CAS. Um POST só: com a senha recusada, lança e nunca tenta de novo.
  */
 
-import { SigaaEstruturaError, SigaaSenhaRecusadaError, SigaaSessaoExpiradaError } from "./erros.ts";
+import { SigaaEstruturaError, SigaaSenhaRecusadaError } from "./erros.ts";
 import type { Pagina, SigaaSessao } from "./http.ts";
 import { documento } from "./jsf.ts";
 
@@ -33,9 +33,11 @@ export async function entrar(sessao: SigaaSessao, usuario: string, senha: string
 	const acao = new URL(form.getAttribute("action") ?? "/sigaa/logar.do?dispatch=logOn", tela.url).toString();
 	const resposta = await sessao.postar(acao, campos);
 	if (ehTelaDeLogin(resposta) || RECUSADO.test(resposta.html)) throw new SigaaSenhaRecusadaError();
-	// Depois do login o SIGAA pode parar num aviso; o portal abre direto.
+	// Depois do login o SIGAA pode parar num aviso; o portal abre direto. Se o portal
+	// volta para a tela de login logo depois do POST, o login não pegou: é senha
+	// recusada, para nunca ser tentada de novo sozinha.
 	const portal = await sessao.get(PORTAL);
-	if (ehTelaDeLogin(portal)) throw new SigaaSessaoExpiradaError();
+	if (ehTelaDeLogin(portal)) throw new SigaaSenhaRecusadaError();
 	return portal;
 }
 

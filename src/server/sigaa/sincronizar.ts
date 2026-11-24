@@ -16,7 +16,7 @@ import type { BibliotecaStore, EstadoSigaa, SigaaStore } from "../../core/ports.
 import { idTurmaSigaa, montarDoSigaa, nomeDeDisciplina, type SigaaTurmaLida } from "../../core/sigaa.ts";
 import { sigaaStore } from "../../store/sigaa.ts";
 import { stores } from "../stores.ts";
-import { SigaaSenhaRecusadaError } from "./erros.ts";
+import { SigaaEstruturaError, SigaaSenhaRecusadaError } from "./erros.ts";
 import { SigaaSessao, baseDoSigaa, type Pagina } from "./http.ts";
 import { entrar, sair } from "./login.ts";
 import { lerSigaa, type ArquivoBaixado } from "./navegar.ts";
@@ -38,18 +38,42 @@ export interface SincronizacaoDeps {
 	agora: () => Date;
 	/** Avisa as telas: "sigaa-changed" e "biblioteca-changed". */
 	emitir: () => void;
+	/** Onde fica a sincronização em andamento. Em produção, um só para o processo
+	 *  inteiro (cada rota do Next pode ter sua cópia deste módulo). */
+	compartilhado?: { andamento: Promise<void> | null };
+}
+
+const KEY = Symbol.for("lh.sigaa.sincronizacao");
+
+/** O estado compartilhado entre as cópias do módulo (rotas compiladas à parte). */
+function compartilhadoGlobal(): { andamento: Promise<void> | null } {
+	const g = globalThis as typeof globalThis & { [KEY]?: { andamento: Promise<void> | null } };
+	g[KEY] ??= { andamento: null };
+	return g[KEY];
 }
 
 const SENHA_GUARDADA_RECUSADA = "O SIGAA recusou a senha guardada. Conecte a conta de novo.";
 
 export function createSincronizacao(deps: SincronizacaoDeps) {
-	let andamento: Promise<void> | null = null;
+	const em = deps.compartilhado ?? { andamento: null };
 	const agora = () => deps.agora().toISOString();
+
+	/** Marca a sincronização como em andamento ANTES de qualquer await; devolve o "terminou". */
+	function reservar(): () => void {
+		let fim!: () => void;
+		em.andamento = new Promise<void>((r) => {
+			fim = r;
+		});
+		return () => {
+			em.andamento = null;
+			fim();
+		};
+	}
 
 	function estado(): EstadoSigaa {
 		const e = deps.sigaa.readEstado();
 		// Um "sincronizando" sem leitura em curso sobrou de um app fechado no meio.
-		if (e.situacao === "sincronizando" && !andamento) return { ...e, situacao: deps.sigaa.readConta() ? "ocioso" : "sem-conta" };
+		if (e.situacao === "sincronizando" && !em.andamento) return { ...e, situacao: deps.sigaa.readConta() ? "ocioso" : "sem-conta" };
 		return e;
 	}
 
@@ -63,11 +87,17 @@ export function createSincronizacao(deps: SincronizacaoDeps) {
 		const turmaId = idTurmaSigaa(lida.semestre, lida.sufixo);
 		const materia = biblioteca.readMateria(lida.codigo);
 		const turma = materia ? biblioteca.readTurma(lida.codigo, turmaId) : null;
+		// Uma leitura sem nenhum tópico de aula, numa turma que tinha, é página que não foi lida:
+		// os dados anteriores ficam (sem isso, todos os tópicos seriam arquivados).
+		if (lida.topicos.length === 0 && turma && turma.aulas.length > 0) throw new SigaaEstruturaError("nenhum tópico de aula nesta leitura");
 		const referencias = biblioteca.readReferencias(lida.codigo, turmaId);
 		const arquivos = [...referencias.arquivos];
 		for (const b of baixados) {
 			const r = biblioteca.addReferenciaFile(lida.codigo, turmaId, b.nome, b.bytes);
-			if (!arquivos.some((a) => a.arquivo === r.arquivo)) arquivos.push({ arquivo: r.arquivo, sha256: r.sha256, sigaaId: b.sigaaId, titulo: b.nome, topicos: [] });
+			const i = arquivos.findIndex((a) => a.arquivo === r.arquivo);
+			if (i < 0) arquivos.push({ arquivo: r.arquivo, sha256: r.sha256, sigaaId: b.sigaaId, titulo: b.nome, topicos: [] });
+			// O mesmo conteúdo já guardado sem o id do SIGAA (ex.: "Salvar materiais" antigo): o id volta.
+			else if (!arquivos[i]!.sigaaId) arquivos[i] = { ...arquivos[i]!, sigaaId: b.sigaaId };
 		}
 		const m = montarDoSigaa(lida, { materia, turma, referencias: { ...referencias, arquivos } }, agora());
 		biblioteca.writeMateria(m.materia);
@@ -86,6 +116,12 @@ export function createSincronizacao(deps: SincronizacaoDeps) {
 				tamanhoMaximo: MAX_IMPORT_BODY_BYTES,
 			});
 			for (const f of leitura.falhas) avisos.push(`Não consegui ler ${nomeDeDisciplina(f.nome)}: ${f.erro}`);
+			if (leitura.turmasLidas === 0) {
+				// Nada lido não é sucesso: o "último sucesso" continua o anterior.
+				const erro = leitura.turmasNoPortal === 0 ? "O SIGAA não mostrou nenhuma turma no portal." : "Não consegui ler nenhuma turma do SIGAA nesta sincronização.";
+				gravar({ situacao: "erro", usuario, ultimaTentativa: inicio, ...(anterior.ultimoSucesso ? { ultimoSucesso: anterior.ultimoSucesso } : {}), erro, avisos });
+				return;
+			}
 			gravar({ situacao: "ocioso", usuario, ultimaTentativa: inicio, ultimoSucesso: agora(), avisos });
 		} catch (err) {
 			falhou(err, usuario, inicio, anterior.ultimoSucesso);
@@ -103,12 +139,6 @@ export function createSincronizacao(deps: SincronizacaoDeps) {
 		gravar({ ...base, situacao: "erro", erro });
 	}
 
-	function iniciar(tarefa: () => Promise<void>): void {
-		andamento = tarefa().finally(() => {
-			andamento = null;
-		});
-	}
-
 	return {
 		estado,
 
@@ -116,19 +146,29 @@ export function createSincronizacao(deps: SincronizacaoDeps) {
 		async conectar(usuarioBruto: string, senha: string): Promise<EstadoSigaa> {
 			const usuario = usuarioBruto.trim();
 			if (!usuario || !senha) throw new BibliotecaEntradaError("Informe usuário e senha.");
-			if (andamento) throw new SigaaOcupadoError();
-			const senhaCifrada = await deps.cifrar(senha); // sem chaveiro, nem tenta o login
-			const sessao = deps.novaSessao();
-			const portal = await entrar(sessao, usuario, senha); // senha recusada: lança, nada gravado
-			const inicio = agora();
-			deps.sigaa.writeConta({ usuario, senhaCifrada });
-			gravar({ ...deps.sigaa.readEstado(), situacao: "sincronizando", usuario, ultimaTentativa: inicio, avisos: [] });
-			iniciar(() => lerEGravar(sessao, portal, usuario, inicio));
+			if (em.andamento) throw new SigaaOcupadoError();
+			const terminar = reservar();
+			let sessao: SigaaSessao;
+			let portal: Pagina;
+			let inicio: string;
+			try {
+				const senhaCifrada = await deps.cifrar(senha); // sem chaveiro, nem tenta o login
+				sessao = deps.novaSessao();
+				portal = await entrar(sessao, usuario, senha); // senha recusada: lança, nada gravado
+				inicio = agora();
+				deps.sigaa.writeConta({ usuario, senhaCifrada });
+				const { erro: _e, ...resto } = deps.sigaa.readEstado();
+				gravar({ ...resto, situacao: "sincronizando", usuario, ultimaTentativa: inicio, avisos: [] });
+			} catch (err) {
+				terminar();
+				throw err;
+			}
+			void lerEGravar(sessao, portal, usuario, inicio).finally(terminar);
 			return estado();
 		},
 
 		sincronizarAgora(): EstadoSigaa {
-			if (andamento) return estado();
+			if (em.andamento) return estado();
 			const conta = deps.sigaa.readConta();
 			if (!conta) {
 				const e: EstadoSigaa = { situacao: "sem-conta", avisos: ["Conecte sua conta UFJ primeiro."] };
@@ -139,18 +179,18 @@ export function createSincronizacao(deps: SincronizacaoDeps) {
 			if (e0.situacao === "senha-recusada") return e0;
 			const inicio = agora();
 			const { erro: _e, ...resto } = e0;
+			const terminar = reservar();
 			gravar({ ...resto, situacao: "sincronizando", usuario: conta.usuario, ultimaTentativa: inicio });
-			iniciar(async () => {
-				let sessao: SigaaSessao | null = null;
+			void (async () => {
 				try {
 					const senha = await deps.decifrar(conta.senhaCifrada);
-					sessao = deps.novaSessao();
+					const sessao = deps.novaSessao();
 					const portal = await entrar(sessao, conta.usuario, senha);
 					await lerEGravar(sessao, portal, conta.usuario, inicio);
 				} catch (err) {
 					falhou(err, conta.usuario, inicio, e0.ultimoSucesso);
 				}
-			});
+			})().finally(terminar);
 			return estado();
 		},
 
@@ -164,7 +204,7 @@ export function createSincronizacao(deps: SincronizacaoDeps) {
 
 		/** Para os testes: a sincronização em andamento, se houver. */
 		emAndamento(): Promise<void> | null {
-			return andamento;
+			return em.andamento;
 		},
 	};
 }
@@ -182,4 +222,5 @@ export const sincronizacao: Sincronizacao = createSincronizacao({
 		emit("sigaa-changed", {});
 		emit("biblioteca-changed", {});
 	},
+	compartilhado: compartilhadoGlobal(),
 });

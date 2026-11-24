@@ -91,6 +91,21 @@ describe("escopo por datas na turma do SIGAA", () => {
 		assert.throws(() => adicionarProva(sem, { nome: "  " }), /Dê um nome à prova\./);
 	});
 
+	it("prova nova na data de uma aula de prova pega os tópicos antes dela (revisão final, I4)", () => {
+		const t = adicionarProva({ ...turmaSigaa(), avaliacoes: [] }, { nome: "1ª prova", data: "2026-09-03" });
+		assert.deepEqual(escopo(t, "1a-prova"), ["limites", "continuidade"]);
+		assert.equal(t.aulas[2]!.avaliacaoId, "1a-prova");
+	});
+
+	it("mudar a data de uma prova ligada desfaz a ligação (revisão final, I4)", () => {
+		const base = turmaSigaa();
+		base.aulas[2] = { ...base.aulas[2]!, avaliacaoId: "p1" };
+		base.avaliacoes = [{ id: "p1", nome: "1ª prova", tipo: "prova-escrita", data: "2026-09-03", escopo: { topicos: [] } }];
+		const t = definirDataProva(recalcularTurma(base), "p1", "2026-09-05");
+		assert.equal(t.aulas[2]!.avaliacaoId, undefined);
+		assert.deepEqual(escopo(t, "p1"), ["derivadas", "regra-da-cadeia"]);
+	});
+
 	it("turma sem sigaa não é recalculada", () => {
 		assert.deepEqual(recalcularTurma(turmaValida()), turmaValida());
 	});

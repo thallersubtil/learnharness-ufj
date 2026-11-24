@@ -88,6 +88,27 @@ describe("rotas das provas", () => {
 		assert.equal(res.status, 400);
 	});
 
+	it("tópico arquivado no conteúdo é descartado sem erro (revisão final, I5)", async () => {
+		const m = bibliotecaStore.readMateria("ICE0001")!;
+		bibliotecaStore.writeMateria({ ...m, topicos: m.topicos.map((t) => (t.id === "limites" ? { ...t, arquivado: true } : t)) });
+		const res = await put({ topicos: ["limites", "derivadas"] });
+		assert.equal(res.status, 200);
+		assert.ok(!provaNoDisco()!.escopo.topicos.includes("limites"));
+		assert.ok(provaNoDisco()!.escopo.topicos.includes("derivadas"));
+	});
+
+	it("preparação de prova do SIGAA sem data pede a data (revisão final, I4)", () => {
+		svc.adicionarProva("ICE0001", TURMA, { nome: "Prova extra" });
+		const v = server.preparacaoView({ materia: "ICE0001", turma: TURMA, avaliacao: "prova-extra" }, new Date(2026, 8, 1));
+		assert.deepEqual(v.avisos, ["Defina a data desta prova para saber o que cai."]);
+	});
+
+	it("preparação de prova do SIGAA sem tópicos antes dela explica o que fazer (revisão final, I4)", () => {
+		svc.adicionarProva("ICE0001", TURMA, { nome: "Prova cedo", data: "2026-08-30" });
+		const v = server.preparacaoView({ materia: "ICE0001", turma: TURMA, avaliacao: "prova-cedo" }, new Date(2026, 7, 1));
+		assert.deepEqual(v.avisos, ["Ainda não há tópicos de aula antes desta prova. Marque o conteúdo em “Conteúdo da prova”, na página da matéria."]);
+	});
+
 	it("POST cria a prova com o id do nome", async () => {
 		const res = await post({ nome: "3ª prova", data: "2026-09-20" });
 		assert.equal(res.status, 200);

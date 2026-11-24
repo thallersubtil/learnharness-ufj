@@ -121,6 +121,22 @@ describe("montar a partir do SIGAA", () => {
 		assert.equal(av.sigaaId, undefined);
 	});
 
+	it("avaliação que some e volta não duplica a prova (revisão final, C1)", () => {
+		const sumiu = proxima(primeira(), { avaliacoes: [] });
+		const voltou = proxima(sumiu, {});
+		assert.equal(voltou.turma.avaliacoes.filter((a) => a.id === "sigaa-999").length, 1);
+		assert.equal(prova(voltou).origemData, "sigaa");
+		assert.equal(prova(voltou).sigaaId, "999");
+	});
+
+	it("tópico que some e volta mantém o id (revisão final, I3)", () => {
+		const sumiu = proxima(primeira(), { topicos: lida().topicos.filter((t) => t.titulo !== "Limites") });
+		const voltou = proxima(sumiu, {});
+		assert.deepEqual(voltou.turma.aulas[0]!.topicos, ["limites"]);
+		assert.equal(voltou.materia.topicos.find((t) => t.id === "limites")!.arquivado, undefined);
+		assert.ok(!voltou.materia.topicos.some((t) => t.id === "limites-2"));
+	});
+
 	it("prova à mão continua como está", () => {
 		const antes = primeira();
 		antes.turma.avaliacoes.push({ id: "3a-prova", nome: "3ª prova", tipo: "prova-escrita", data: "2026-09-20", origemData: "manual", escopo: { topicos: [] } });
@@ -153,8 +169,9 @@ describe("montar a partir do SIGAA", () => {
 		assert.equal(m.materia.nome, "Disciplina Teste");
 		assert.equal(m.materia.ementa, "Limites. Derivadas.");
 		const ids = m.materia.topicos.map((t) => t.id);
-		for (const id of ["limites", "derivadas", "antigo", "limites-2", "regra-da-cadeia"]) assert.ok(ids.includes(id), id);
-		assert.deepEqual(m.turma.aulas[0]!.topicos, ["limites-2"]);
+		for (const id of ["limites", "derivadas", "antigo", "regra-da-cadeia"]) assert.ok(ids.includes(id), id);
+		assert.ok(!ids.includes("limites-2"), "o mesmo título é o mesmo tópico da matéria (revisão final, I3)");
+		assert.deepEqual(m.turma.aulas[0]!.topicos, ["limites"]);
 	});
 });
 

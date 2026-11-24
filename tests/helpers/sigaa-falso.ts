@@ -25,6 +25,12 @@ export interface OpcoesSigaaFalso {
 	secaoQuebrada?: { idTurma: string; rotulo: string };
 	/** Cada página de Arquivos só aceita um download (como uma visão JSF que expira). */
 	umDownloadPorPagina?: boolean;
+	/** Senha errada cai numa página sem formulário de login nem mensagem de erro. */
+	recusaSilenciosa?: boolean;
+	/** O portal vem sem a lista de turmas. */
+	portalSemTurmas?: boolean;
+	/** A página principal desta turma vem sem nenhum tópico de aula. */
+	semTopicos?: string;
 	/** Porta fixa (só para o script de desenvolvimento); sem ela, uma porta livre. */
 	porta?: number;
 	/** Chamado antes de servir cada página interna (caminho e, para seções, o rótulo). */
@@ -78,11 +84,14 @@ export function lerFormLatin1(corpo: string): Map<string, string> {
 	return out;
 }
 
-function pagina(arquivo: string, troca: Record<string, string>): Buffer {
+function pagina(arquivo: string, troca: Record<string, string>, mudar?: (texto: string) => string): Buffer {
 	let texto = fs.readFileSync(path.join(PASTA, arquivo), "utf8");
 	for (const [k, v] of Object.entries(troca)) texto = texto.split(`{{${k}}}`).join(v);
-	return Buffer.from(texto, "latin1");
+	return Buffer.from(mudar ? mudar(texto) : texto, "latin1");
 }
+
+/** Tira um bloco HTML marcado por uma classe (e o que vem dentro), para os cenários de página vazia. */
+const semBlocos = (classe: string) => (texto: string) => texto.replace(new RegExp(`<div [^>]*class="${classe}"[\\s\\S]*?</div></div>`, "g"), "");
 
 export async function iniciarSigaaFalso(opcoes: OpcoesSigaaFalso = {}): Promise<SigaaFalso> {
 	const usuario = opcoes.usuario ?? "aluno.teste";
@@ -101,11 +110,11 @@ export async function iniciarSigaaFalso(opcoes: OpcoesSigaaFalso = {}): Promise<
 
 			const cookie = /JSESSIONID=([^;]+)/.exec(req.headers.cookie ?? "")?.[1];
 			let s = cookie ? sessoes.get(cookie) : undefined;
-			const html = (arquivo: string, troca: Record<string, string> = {}, status = 200) => {
+			const html = (arquivo: string, troca: Record<string, string> = {}, status = 200, mudar?: (texto: string) => string) => {
 				const vs = s ? `j_id${++s.contador}` : "j_id0";
 				if (s) s.viewStates = [...s.viewStates.slice(-14), vs];
 				res.writeHead(status, { "Content-Type": "text/html;charset=ISO-8859-1" });
-				res.end(pagina(arquivo, { VIEWSTATE: vs, ...troca }));
+				res.end(pagina(arquivo, { VIEWSTATE: vs, ...troca }, mudar));
 			};
 			const redirecionar = (para: string) => {
 				res.writeHead(302, { Location: para });
@@ -128,6 +137,7 @@ export async function iniciarSigaaFalso(opcoes: OpcoesSigaaFalso = {}): Promise<
 					s.logado = true;
 					return redirecionar(opcoes.avisoDepoisDoLogin ? "/sigaa/avaliacao/formulario_avaliacao/notificacao_view.jsf" : "/sigaa/portais/discente/discente.jsf");
 				}
+				if (opcoes.recusaSilenciosa) return html("aviso.html");
 				return html("login.html", { ACAO: `/sigaa/logar.do;jsessionid=${s.id}?dispatch=logOn`, MENSAGEM: '<center style="color: #922;">Usuário e/ou senha inválidos</center>' });
 			}
 			if (caminho === "/sigaa/logar.do" && url.searchParams.get("dispatch") === "logOff") {
@@ -151,7 +161,7 @@ export async function iniciarSigaaFalso(opcoes: OpcoesSigaaFalso = {}): Promise<
 			}
 			if (caminho === "/sigaa/portais/discente/discente.jsf" && req.method === "GET") {
 				opcoes.aoServir?.(caminho);
-				return html("portal.html");
+				return html("portal.html", {}, 200, opcoes.portalSemTurmas ? (t) => t.replace(/<div id="turmas-portal">[\s\S]*?<\/table>\s*<\/div>/, "").replace(/<div id="atualizacoes-turma">[\s\S]*?<\/form>\s*<\/div>/, "") : undefined);
 			}
 			const extra = tratarTurma({ req, caminho, form, s, viewStateValido, html, opcoes, res });
 			if (extra) return;
@@ -175,7 +185,7 @@ interface ContextoTurma {
 	form: Map<string, string>;
 	s: Sessao;
 	viewStateValido: () => boolean;
-	html: (arquivo: string, troca?: Record<string, string>, status?: number) => void;
+	html: (arquivo: string, troca?: Record<string, string>, status?: number, mudar?: (texto: string) => string) => void;
 	opcoes: OpcoesSigaaFalso;
 	res: http.ServerResponse;
 }
@@ -221,7 +231,7 @@ function tratarTurma(c: ContextoTurma): boolean {
 		}
 		s.turma = id;
 		opcoes.aoServir?.(caminho, "Principal");
-		c.html(PAGINAS[id]!.principal);
+		c.html(PAGINAS[id]!.principal, {}, 200, opcoes.semTopicos === id ? semBlocos("topico-aula") : undefined);
 		return true;
 	}
 	const paginas = s.turma ? PAGINAS[s.turma] : undefined;

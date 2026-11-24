@@ -154,7 +154,13 @@ function idsDosTopicos(lida: SigaaTurmaLida, turmaAnterior: Turma | null, materi
 			usados.add(achado.id);
 			return achado.id;
 		}
-		// 3. Tópico novo.
+		// 3. O mesmo título de um tópico que a matéria já tem (mesmo arquivado): é ele.
+		const daMateria = materia.topicos.find((m) => normalizarTitulo(m.titulo) === norm && !usados.has(m.id));
+		if (daMateria) {
+			usados.add(daMateria.id);
+			return daMateria.id;
+		}
+		// 4. Tópico novo.
 		const base = slugify(t.titulo.normalize("NFKD")) || "topico";
 		let id = base;
 		for (let n = 2; ocupados.has(id) || usados.has(id); n++) id = `${base}-${n}`;
@@ -197,6 +203,13 @@ function mesclarAvaliacoes(lida: SigaaTurmaLida, anteriores: readonly Avaliacao[
 		return { ...resto, nome, data: sa.data, origemData: "sigaa", ...(sa.hora && HORA_RE.test(sa.hora) ? { hora: sa.hora } : {}) };
 	});
 	for (const sa of vindas.values()) {
+		// A prova que tinha sumido do SIGAA (e ficou "à mão") volta a ser dele: mesmo id.
+		const i = out.findIndex((a) => a.id === `sigaa-${sa.sigaaId}`);
+		if (i >= 0) {
+			const { hora: _h, ...resto } = out[i]!;
+			out[i] = { ...resto, nome: sa.descricao.trim() || resto.nome, data: sa.data, origemData: "sigaa", sigaaId: sa.sigaaId, ...(sa.hora && HORA_RE.test(sa.hora) ? { hora: sa.hora } : {}) };
+			continue;
+		}
 		out.push({
 			id: `sigaa-${sa.sigaaId}`,
 			nome: sa.descricao.trim() || "Prova",
@@ -255,12 +268,8 @@ export function montarDoSigaa(
 		};
 	});
 
+	// A ligação aula de prova ↔ prova da mesma data é refeita no recalcularTurma.
 	const avaliacoes = mesclarAvaliacoes(lida, anterior.turma?.avaliacoes ?? [], avisos);
-	for (const aula of aulas) {
-		if (!aula.sigaa?.prova || !aula.data) continue;
-		const ligada = avaliacoes.find((a) => a.data === aula.data && (a.tipo === "prova-escrita" || a.tipo === "prova-pratica"));
-		if (ligada) aula.avaliacaoId = ligada.id;
-	}
 
 	const t0 = anterior.turma;
 	const turma = recalcularTurma({

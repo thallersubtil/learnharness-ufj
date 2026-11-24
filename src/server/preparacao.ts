@@ -113,6 +113,9 @@ export function practicePicksForTopico(ref: UfjContextRef, deps: PreparacaoDeps 
 }
 
 const SEM_ESCOPO = "Esta avaliação está sem escopo. Edite o plano para escolher os tópicos.";
+// Turmas do SIGAA não têm "Editar plano": o conteúdo vem das datas (spec SIGAA §7.6).
+const SIGAA_SEM_DATA = "Defina a data desta prova para saber o que cai.";
+const SIGAA_SEM_TOPICOS = "Ainda não há tópicos de aula antes desta prova. Marque o conteúdo em “Conteúdo da prova”, na página da matéria.";
 
 /** A view da tela de preparação de uma avaliação (spec §7.5). */
 export function preparacaoView(ref: { materia: string; turma: string; avaliacao: string }, hoje: Date, deps: PreparacaoDeps = defaultDeps()): PreparacaoView {
@@ -163,7 +166,7 @@ export function preparacaoView(ref: { materia: string; turma: string; avaliacao:
 		criteriosMedia: turma.criteriosMedia,
 		topicos,
 		passos: proximosPassos(topicos),
-		avisos: topicos.length === 0 ? [SEM_ESCOPO] : [],
+		avisos: topicos.length > 0 ? [] : !turma.sigaa ? [SEM_ESCOPO] : avaliacao.data ? [SIGAA_SEM_TOPICOS] : [SIGAA_SEM_DATA],
 	};
 }
 
