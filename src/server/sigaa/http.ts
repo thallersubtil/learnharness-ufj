@@ -1,0 +1,127 @@
+// Adaptado de sigaa-mcp (https://github.com/Pedromaia0/sigaa-mcp). Copyright (c) 2026 Pedro Maia. Licença MIT.
+/**
+ * SESSÃO HTTP COM O SIGAA DA UFJ (spec SIGAA §4, §7.3).
+ *
+ * Cookies só na memória, redirecionamentos seguidos à mão (para guardar o
+ * cookie de cada passo), pausa entre pedidos para não sobrecarregar o SIGAA,
+ * e as páginas decodificadas pelos bytes no charset da resposta: o SIGAA
+ * responde em ISO-8859-1 e o `Response.text()` do Node estragaria os acentos.
+ * Nenhum erro ou log leva corpo de pedido, cookie ou campo de formulário.
+ */
+
+import { SigaaEstruturaError, SigaaIndisponivelError } from "./erros.ts";
+
+export const SIGAA_BASE = "https://sigaa.sistemas.ufj.edu.br";
+
+/** A base do SIGAA. Outra base só fora do app de desktop (desenvolvimento e testes). */
+export function baseDoSigaa(env: NodeJS.ProcessEnv | Record<string, string | undefined> = process.env): string {
+	const outra = env.LH_SIGAA_BASE_URL?.trim();
+	if (outra && env.LH_DESKTOP_SERVER !== "1") return outra.replace(/\/+$/, "");
+	return SIGAA_BASE;
+}
+
+export interface Pagina {
+	url: string;
+	status: number;
+	tipo: string;
+	bytes: Uint8Array;
+	/** O HTML decodificado; vazio quando a resposta não é uma página. */
+	html: string;
+	headers: Headers;
+}
+
+const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+
+/** Corpo x-www-form-urlencoded como um navegador numa página ISO-8859-1. */
+export function corpoLatin1(campos: [string, string][]): string {
+	const enc = (s: string) => {
+		let out = "";
+		for (const ch of s) {
+			const c = ch.codePointAt(0)!;
+			if (c === 0x20) out += "+";
+			else if (/[A-Za-z0-9*\-._]/.test(ch)) out += ch;
+			else if (c < 256) out += `%${c.toString(16).toUpperCase().padStart(2, "0")}`;
+			else out += encodeURIComponent(`&#${c};`);
+		}
+		return out;
+	};
+	return campos.map(([k, v]) => `${enc(k)}=${enc(v)}`).join("&");
+}
+
+function charsetDe(tipo: string): string {
+	const m = /charset=([^;\s]+)/i.exec(tipo);
+	const c = m?.[1]?.toLowerCase();
+	return c === "utf-8" || c === "utf8" ? "utf-8" : "windows-1252";
+}
+
+export class SigaaSessao {
+	private readonly base: URL;
+	private readonly esperarMs: number;
+	private readonly fetchFn: typeof fetch;
+	private readonly timeoutMs: number;
+	private readonly cookies = new Map<string, string>();
+
+	constructor(opcoes: { base: string; esperarMs: number; fetch?: typeof fetch; timeoutMs?: number }) {
+		this.base = new URL(opcoes.base);
+		this.esperarMs = opcoes.esperarMs;
+		this.fetchFn = opcoes.fetch ?? fetch;
+		this.timeoutMs = opcoes.timeoutMs ?? 20_000;
+	}
+
+	get(caminhoOuUrl: string): Promise<Pagina> {
+		return this.navegar(caminhoOuUrl, { method: "GET" });
+	}
+
+	postar(url: string, campos: [string, string][]): Promise<Pagina> {
+		return this.navegar(url, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: corpoLatin1(campos) });
+	}
+
+	private resolver(caminhoOuUrl: string, relativoA: string = this.base.toString()): URL {
+		const u = new URL(caminhoOuUrl, relativoA);
+		if (u.origin !== this.base.origin) throw new SigaaEstruturaError("redirecionamento para outro endereço");
+		return u;
+	}
+
+	private async pedir(url: URL, init: { method: string; headers?: Record<string, string>; body?: string }): Promise<Response> {
+		if (this.esperarMs > 0) await new Promise((r) => setTimeout(r, this.esperarMs));
+		const headers: Record<string, string> = { "User-Agent": UA, Accept: "text/html,application/xhtml+xml,*/*;q=0.8", "Accept-Language": "pt-BR,pt;q=0.9", ...(init.headers ?? {}) };
+		const cookie = [...this.cookies].map(([k, v]) => `${k}=${v}`).join("; ");
+		if (cookie) headers.Cookie = cookie;
+		const controller = new AbortController();
+		const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+		try {
+			const res = await this.fetchFn(url, { method: init.method, headers, body: init.body, redirect: "manual", signal: controller.signal });
+			for (const h of res.headers.getSetCookie()) {
+				const par = h.split(";")[0] ?? "";
+				const i = par.indexOf("=");
+				if (i > 0) this.cookies.set(par.slice(0, i).trim(), par.slice(i + 1).trim());
+			}
+			return res;
+		} catch {
+			throw new SigaaIndisponivelError();
+		} finally {
+			clearTimeout(timer);
+		}
+	}
+
+	private async navegar(caminhoOuUrl: string, init: { method: string; headers?: Record<string, string>; body?: string }): Promise<Pagina> {
+		let atual = this.resolver(caminhoOuUrl);
+		let res = await this.pedir(atual, init);
+		for (let i = 0; i < 10 && res.status >= 300 && res.status < 400; i++) {
+			const loc = res.headers.get("location");
+			if (!loc) break;
+			atual = this.resolver(loc, atual.toString());
+			res = await this.pedir(atual, { method: "GET" });
+		}
+		if (res.status >= 300 && res.status < 400) throw new SigaaEstruturaError("redirecionamentos demais");
+		let bytes: Uint8Array;
+		try {
+			bytes = new Uint8Array(await res.arrayBuffer());
+		} catch {
+			throw new SigaaIndisponivelError();
+		}
+		const tipo = res.headers.get("content-type") ?? "";
+		const ehPagina = tipo === "" || /html|xml/i.test(tipo);
+		return { url: atual.toString(), status: res.status, tipo, bytes, html: ehPagina ? new TextDecoder(charsetDe(tipo)).decode(bytes) : "", headers: res.headers };
+	}
+}
