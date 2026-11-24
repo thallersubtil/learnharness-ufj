@@ -54,7 +54,34 @@ describe("login no SIGAA", () => {
 	it("recusa redirecionamento para outro host", async () => {
 		const fetchFalso = (async () => new Response(null, { status: 302, headers: { Location: "https://outro.exemplo/roubar" } })) as typeof fetch;
 		const s = new SigaaSessao({ base: "https://sigaa.exemplo", esperarMs: 0, fetch: fetchFalso });
-		await assert.rejects(s.get("/sigaa/verTelaLogin.do"), SigaaEstruturaError);
+		await assert.rejects(s.get("/sigaa/verTelaLogin.do"), (e: unknown) => e instanceof SigaaEstruturaError && /\(https:\/\/outro\.exemplo\)/.test(e.message) && !/roubar/.test(e.message));
+	});
+
+	it("o download segue para o servidor de arquivos da UFJ, sem levar os cookies do SIGAA (sincronização real, 24/11)", async () => {
+		const pedidos: { url: string; cookie: string | null }[] = [];
+		const fetchFalso = (async (url: URL | string, init?: RequestInit) => {
+			const u = new URL(String(url));
+			pedidos.push({ url: u.toString(), cookie: new Headers(init?.headers).get("cookie") });
+			if (u.hostname === "sigaa.sistemas.ufj.edu.br" && u.pathname === "/sigaa/inicio") return new Response("<html></html>", { status: 200, headers: { "Set-Cookie": "JSESSIONID=abc; Path=/sigaa", "Content-Type": "text/html" } });
+			if (u.hostname === "sigaa.sistemas.ufj.edu.br") return new Response(null, { status: 301, headers: { Location: "https://arquivos.sistemas.ufj.edu.br/arquivos/2026abc/Aula.pdf" } });
+			return new Response("%PDF-1.4", { status: 200, headers: { "Content-Type": "application/pdf", "Content-Disposition": 'attachment; filename="Aula.pdf"', "Set-Cookie": "rastreio=1" } });
+		}) as typeof fetch;
+		const s = new SigaaSessao({ base: SIGAA_BASE, esperarMs: 0, fetch: fetchFalso });
+		await s.get("/sigaa/inicio");
+		const r = await s.postar(`${SIGAA_BASE}/sigaa/ava/ArquivoTurma/listar_discente.jsf`, [["id", "1"]]);
+		assert.equal(new TextDecoder().decode(r.bytes), "%PDF-1.4");
+		assert.equal(pedidos[1]!.cookie, "JSESSIONID=abc", "o SIGAA recebe a sessão");
+		assert.equal(pedidos[2]!.url, "https://arquivos.sistemas.ufj.edu.br/arquivos/2026abc/Aula.pdf");
+		assert.equal(pedidos[2]!.cookie, null, "o servidor de arquivos não recebe cookie nenhum");
+		await s.get("/sigaa/inicio");
+		assert.equal(pedidos[3]!.cookie, "JSESSIONID=abc", "cookie do servidor de arquivos não entra na sessão");
+	});
+
+	it("o servidor de arquivos só vale como destino de redirecionamento, e só com a base real", async () => {
+		const fetchFalso = (async () => new Response("x", { status: 200 })) as typeof fetch;
+		await assert.rejects(new SigaaSessao({ base: SIGAA_BASE, esperarMs: 0, fetch: fetchFalso }).get("https://arquivos.sistemas.ufj.edu.br/arquivos/x.pdf"), SigaaEstruturaError);
+		const comRedirect = (async (url: URL | string) => (new URL(String(url)).hostname === "sigaa.exemplo" ? new Response(null, { status: 301, headers: { Location: "https://arquivos.sistemas.ufj.edu.br/a.pdf" } }) : new Response("x"))) as typeof fetch;
+		await assert.rejects(new SigaaSessao({ base: "https://sigaa.exemplo", esperarMs: 0, fetch: comRedirect }).get("/x"), SigaaEstruturaError);
 	});
 
 	it("baseDoSigaa: produção ignora LH_SIGAA_BASE_URL no app de desktop", () => {

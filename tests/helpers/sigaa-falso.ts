@@ -31,6 +31,8 @@ export interface OpcoesSigaaFalso {
 	portalSemTurmas?: boolean;
 	/** A página principal desta turma vem sem nenhum tópico de aula. */
 	semTopicos?: string;
+	/** Como o SIGAA real: o download responde 301 para um servidor de arquivos separado. */
+	arquivosEmOutroHost?: boolean;
 	/** Porta fixa (só para o script de desenvolvimento); sem ela, uma porta livre. */
 	porta?: number;
 	/** Chamado antes de servir cada página interna (caminho e, para seções, o rótulo). */
@@ -46,6 +48,9 @@ export interface PedidoRecebido {
 export interface SigaaFalso {
 	base: string;
 	pedidos: PedidoRecebido[];
+	/** Com `arquivosEmOutroHost`: a origem do servidor de arquivos e o que ele recebeu. */
+	origemArquivos?: string;
+	pedidosArquivos: { caminho: string; cookie: string | null }[];
 	fechar(): Promise<void>;
 }
 
@@ -98,6 +103,28 @@ export async function iniciarSigaaFalso(opcoes: OpcoesSigaaFalso = {}): Promise<
 	const senhaCerta = opcoes.senhaCerta ?? "segredo";
 	const sessoes = new Map<string, Sessao>();
 	const pedidos: PedidoRecebido[] = [];
+	const pedidosArquivos: SigaaFalso["pedidosArquivos"] = [];
+	// O servidor de arquivos separado (o arquivos.sistemas.ufj.edu.br de verdade).
+	let origemArquivos: string | undefined;
+	const servidorArquivos = opcoes.arquivosEmOutroHost
+		? http.createServer((req, res) => {
+				const url = new URL(req.url ?? "/", "http://127.0.0.1");
+				pedidosArquivos.push({ caminho: url.pathname, cookie: req.headers.cookie ?? null });
+				const id = /^\/arquivos\/(\d+)\//.exec(url.pathname)?.[1] ?? "";
+				const arq = ARQUIVOS_FALSOS[id];
+				if (!arq) {
+					res.writeHead(404);
+					res.end();
+					return;
+				}
+				res.writeHead(200, { "Content-Type": arq.tipo, "Content-Disposition": `attachment; filename="${arq.nome}"` });
+				res.end(arq.corpo);
+			})
+		: null;
+	if (servidorArquivos) {
+		await new Promise<void>((ok) => servidorArquivos.listen(0, "127.0.0.1", ok));
+		origemArquivos = `http://127.0.0.1:${(servidorArquivos.address() as AddressInfo).port}`;
+	}
 
 	const servidor = http.createServer((req, res) => {
 		const partes: Buffer[] = [];
@@ -163,7 +190,7 @@ export async function iniciarSigaaFalso(opcoes: OpcoesSigaaFalso = {}): Promise<
 				opcoes.aoServir?.(caminho);
 				return html("portal.html", {}, 200, opcoes.portalSemTurmas ? (t) => t.replace(/<div id="turmas-portal">[\s\S]*?<\/table>\s*<\/div>/, "").replace(/<div id="atualizacoes-turma">[\s\S]*?<\/form>\s*<\/div>/, "") : undefined);
 			}
-			const extra = tratarTurma({ req, caminho, form, s, viewStateValido, html, opcoes, res });
+			const extra = tratarTurma({ req, caminho, form, s, viewStateValido, html, opcoes, res, origemArquivos });
 			if (extra) return;
 			res.writeHead(404, { "Content-Type": "text/plain" });
 			res.end("não encontrado");
@@ -175,7 +202,12 @@ export async function iniciarSigaaFalso(opcoes: OpcoesSigaaFalso = {}): Promise<
 	return {
 		base: `http://127.0.0.1:${port}`,
 		pedidos,
-		fechar: () => new Promise<void>((ok) => servidor.close(() => ok())),
+		...(origemArquivos ? { origemArquivos } : {}),
+		pedidosArquivos,
+		fechar: async () => {
+			await new Promise<void>((ok) => servidor.close(() => ok()));
+			if (servidorArquivos) await new Promise<void>((ok) => servidorArquivos.close(() => ok()));
+		},
 	};
 }
 
@@ -188,6 +220,7 @@ interface ContextoTurma {
 	html: (arquivo: string, troca?: Record<string, string>, status?: number, mudar?: (texto: string) => string) => void;
 	opcoes: OpcoesSigaaFalso;
 	res: http.ServerResponse;
+	origemArquivos?: string;
 }
 
 /** Os itens do menu das páginas de exemplo: sufixo da chave → rótulo. */
@@ -263,6 +296,11 @@ function tratarTurma(c: ContextoTurma): boolean {
 		}
 		s.downloads.set(vs, feitos + 1);
 		opcoes.aoServir?.(caminho, "download");
+		if (c.origemArquivos) {
+			res.writeHead(301, { Location: `${c.origemArquivos}/arquivos/${form.get("id")}/${encodeURIComponent(arq.nome)}` });
+			res.end();
+			return true;
+		}
 		res.writeHead(200, { "Content-Type": arq.tipo, "Content-Disposition": `attachment; filename="${Buffer.from(arq.nome, "latin1").toString("latin1")}"` });
 		res.end(arq.corpo);
 		return true;

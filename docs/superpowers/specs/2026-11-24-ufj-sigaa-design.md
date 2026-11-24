@@ -301,7 +301,10 @@ limite de importação atual é 25 MB).
 
 **Segurança**: lista fixa de hosts (`sigaa.sistemas.ufj.edu.br`); a senha só
 entra no POST de login; nenhum redirecionamento leva a senha para outro host;
-os cookies ficam só na memória; log sem valores de campo.
+os cookies ficam só na memória; log sem valores de campo. O download de um
+arquivo responde 301 para `arquivos.sistemas.ufj.edu.br` (visto na primeira
+sincronização real, 24/11/2026): esse host vale só como destino de
+redirecionamento e nunca recebe cookie do SIGAA.
 
 **Falhas parciais**: se uma seção de uma turma não puder ser lida, os dados
 anteriores daquela seção ficam e a matéria mostra "Não consegui ler as tarefas

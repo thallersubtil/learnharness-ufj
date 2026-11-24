@@ -94,6 +94,29 @@ describe("navegar pelo SIGAA", () => {
 		assert.equal(lidas[0]!.baixados.length, 4);
 	});
 
+	it("download que redireciona para o servidor de arquivos funciona, sem levar cookie (sincronização real, 24/11)", async () => {
+		const f = await iniciarSigaaFalso({ arquivosEmOutroHost: true });
+		abertos.push(f);
+		const sessao = new SigaaSessao({ base: f.base, esperarMs: 0, origensDeArquivos: [f.origemArquivos!] });
+		const portal = await entrar(sessao, "aluno.teste", "segredo");
+		const lidas: ArquivoBaixado[][] = [];
+		const leitura = await lerSigaa(sessao, portal, { jaBaixado: () => false, aoLerTurma: (_l, b) => lidas.push(b), tamanhoMaximo: 26 * 1024 * 1024 });
+		assert.deepEqual(leitura.falhas, []);
+		assert.deepEqual(lidas[0]!.map((x) => x.nome), ["Aula_1_Limites.pdf", "Lista_regra_da_cadeia.pdf", "Exemplos.ipynb.md", "Ficha de avaliação.docx"]);
+		assert.equal(f.pedidosArquivos.length, 5);
+		assert.ok(f.pedidosArquivos.every((p) => p.cookie === null));
+	});
+
+	it("sem o servidor de arquivos na lista, o redirecionamento é recusado e a turma vira falha", async () => {
+		const f = await iniciarSigaaFalso({ arquivosEmOutroHost: true });
+		abertos.push(f);
+		const sessao = new SigaaSessao({ base: f.base, esperarMs: 0 });
+		const portal = await entrar(sessao, "aluno.teste", "segredo");
+		const leitura = await lerSigaa(sessao, portal, { jaBaixado: () => false, aoLerTurma: () => {}, tamanhoMaximo: 26 * 1024 * 1024 });
+		assert.equal(leitura.turmasLidas, 0);
+		assert.match(leitura.falhas[0]!.erro, /redirecionamento para outro endereço \(http:\/\/127\.0\.0\.1:\d+\)/);
+	});
+
 	it("ipynb vira texto com o código e sem as saídas", async () => {
 		const { lidas } = await ler();
 		const nb = new TextDecoder().decode(lidas[0]!.baixados.find((x) => x.nome === "Exemplos.ipynb.md")!.bytes);

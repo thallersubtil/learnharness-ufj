@@ -13,6 +13,11 @@ import { SigaaEstruturaError, SigaaIndisponivelError } from "./erros.ts";
 
 export const SIGAA_BASE = "https://sigaa.sistemas.ufj.edu.br";
 
+/** O servidor de arquivos da UFJ: o download de um arquivo da turma responde 301
+ *  para cá (visto na sincronização real de 24/11/2026). Só vale como destino de
+ *  redirecionamento e nunca recebe cookie do SIGAA. */
+export const ARQUIVOS_UFJ = "https://arquivos.sistemas.ufj.edu.br";
+
 /** A base do SIGAA. Outra base só fora do app de desktop (desenvolvimento e testes). */
 export function baseDoSigaa(env: NodeJS.ProcessEnv | Record<string, string | undefined> = process.env): string {
 	const outra = env.LH_SIGAA_BASE_URL?.trim();
@@ -70,12 +75,16 @@ export class SigaaSessao {
 	private readonly fetchFn: typeof fetch;
 	private readonly timeoutMs: number;
 	private readonly cookies = new Map<string, string>();
+	/** Origens aceitas só como destino de redirecionamento (o servidor de arquivos). */
+	private readonly origensDeArquivos: ReadonlySet<string>;
 
-	constructor(opcoes: { base: string; esperarMs: number; fetch?: typeof fetch; timeoutMs?: number }) {
+	constructor(opcoes: { base: string; esperarMs: number; fetch?: typeof fetch; timeoutMs?: number; origensDeArquivos?: string[] }) {
 		this.base = new URL(opcoes.base);
 		this.esperarMs = opcoes.esperarMs;
 		this.fetchFn = opcoes.fetch ?? fetch;
 		this.timeoutMs = opcoes.timeoutMs ?? 20_000;
+		const padrao = this.base.origin === new URL(SIGAA_BASE).origin ? [ARQUIVOS_UFJ] : [];
+		this.origensDeArquivos = new Set((opcoes.origensDeArquivos ?? padrao).map((o) => new URL(o).origin));
 	}
 
 	get(caminhoOuUrl: string): Promise<Pagina> {
@@ -86,22 +95,26 @@ export class SigaaSessao {
 		return this.navegar(url, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: corpoLatin1(campos) });
 	}
 
-	private resolver(caminhoOuUrl: string, relativoA: string = this.base.toString()): URL {
+	private resolver(caminhoOuUrl: string, relativoA: string = this.base.toString(), redirecionamento = false): URL {
 		const u = new URL(caminhoOuUrl, relativoA);
-		if (u.origin !== this.base.origin) throw new SigaaEstruturaError("redirecionamento para outro endereço");
-		return u;
+		if (u.origin === this.base.origin) return u;
+		if (redirecionamento && this.origensDeArquivos.has(u.origin)) return u;
+		// Só a origem vai na mensagem: caminho e query podem levar chaves de sessão.
+		throw new SigaaEstruturaError(redirecionamento ? `redirecionamento para outro endereço (${u.origin})` : `endereço fora do SIGAA (${u.origin})`);
 	}
 
 	private async pedir(url: URL, init: { method: string; headers?: Record<string, string>; body?: string }): Promise<Response> {
 		if (this.esperarMs > 0) await new Promise((r) => setTimeout(r, this.esperarMs));
 		const headers: Record<string, string> = { "User-Agent": UA, Accept: "text/html,application/xhtml+xml,*/*;q=0.8", "Accept-Language": "pt-BR,pt;q=0.9", ...(init.headers ?? {}) };
+		// A sessão do SIGAA só vai para o SIGAA (o servidor de arquivos não recebe cookie).
+		const doSigaa = url.origin === this.base.origin;
 		const cookie = [...this.cookies].map(([k, v]) => `${k}=${v}`).join("; ");
-		if (cookie) headers.Cookie = cookie;
+		if (cookie && doSigaa) headers.Cookie = cookie;
 		const controller = new AbortController();
 		const timer = setTimeout(() => controller.abort(), this.timeoutMs);
 		try {
 			const res = await this.fetchFn(url, { method: init.method, headers, body: init.body, redirect: "manual", signal: controller.signal });
-			for (const h of res.headers.getSetCookie()) {
+			for (const h of doSigaa ? res.headers.getSetCookie() : []) {
 				const par = h.split(";")[0] ?? "";
 				const i = par.indexOf("=");
 				if (i > 0) this.cookies.set(par.slice(0, i).trim(), par.slice(i + 1).trim());
@@ -120,7 +133,7 @@ export class SigaaSessao {
 		for (let i = 0; i < 10 && res.status >= 300 && res.status < 400; i++) {
 			const loc = res.headers.get("location");
 			if (!loc) break;
-			atual = this.resolver(loc, atual.toString());
+			atual = this.resolver(loc, atual.toString(), true);
 			res = await this.pedir(atual, { method: "GET" });
 		}
 		if (res.status >= 300 && res.status < 400) throw new SigaaEstruturaError("redirecionamentos demais");
