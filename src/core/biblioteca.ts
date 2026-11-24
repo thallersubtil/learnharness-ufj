@@ -46,6 +46,19 @@ export interface Aula {
 	avaliacaoId?: string;
 	/** ids de Topico da matéria; vazio em aulas de avaliação ou exercícios */
 	topicos: string[];
+	/** Tópico de aula lido do SIGAA (spec SIGAA §7.4). */
+	sigaa?: AulaSigaa;
+}
+
+export interface AulaSigaa {
+	/** O título do tópico de aula no SIGAA, sem o período. */
+	titulo: string;
+	/** AAAA-MM-DD — fim do período do tópico. */
+	fim?: string;
+	/** O tópico é uma prova ("Avaliação da aprendizagem"): marca o limite do escopo. */
+	prova?: true;
+	/** "Não haverá aula". */
+	cancelada?: true;
 }
 
 export const TIPOS_AVALIACAO = [
@@ -75,7 +88,18 @@ export interface Avaliacao {
 	peso?: string;
 	escopo: { topicos: string[] };
 	observacoes?: string;
+	/** De onde veio a data (spec SIGAA §7.5). */
+	origemData?: OrigemData;
+	/** Id da linha em "Datas de Avaliações" do SIGAA. */
+	sigaaId?: string;
+	/** HH:MM */
+	hora?: string;
+	/** Escolhas do aluno que vencem o escopo calculado. */
+	escopoManual?: { incluidos: string[]; excluidos: string[] };
 }
+
+export const ORIGENS_DATA = ["sigaa", "manual", "plano"] as const;
+export type OrigemData = (typeof ORIGENS_DATA)[number];
 
 export interface Turma {
 	formato: 1;
@@ -92,11 +116,13 @@ export interface Turma {
 	metodologia?: string;
 	importadoEm: string;
 	revisadoEm: string;
+	/** A turma é montada pelo SIGAA (spec SIGAA §7.4). */
+	sigaa?: { idTurma: string; sufixo?: string; sincronizadoEm: string };
 }
 
 export interface Referencias {
 	formato: 1;
-	arquivos: { arquivo: string; titulo?: string; topicos: string[]; sha256: string }[];
+	arquivos: { arquivo: string; titulo?: string; topicos: string[]; sha256: string; sigaaId?: string; aula?: number }[];
 }
 
 /** Arquivo da biblioteca com formato mais novo que este app. */
@@ -136,6 +162,7 @@ const SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const CODIGO_RE = /^[A-Z0-9]{3,12}$/;
 const DATA_RE = /^\d{4}-\d{2}-\d{2}$/;
 const SHA256_RE = /^[0-9a-f]{64}$/;
+const HORA_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 export function slugify(texto: string): string {
 	return texto
@@ -291,7 +318,25 @@ function parseAula(raw: unknown, onde: string): Aula {
 	if (estrategias !== undefined) a.estrategias = estrategias;
 	const avaliacaoId = optStr(raw, "avaliacaoId", onde);
 	if (avaliacaoId !== undefined) a.avaliacaoId = avaliacaoId;
+	if (raw.sigaa !== undefined) a.sigaa = parseAulaSigaa(raw.sigaa, `${onde} (aula ${ordem})`);
 	return a;
+}
+
+function optVerdade(r: Record<string, unknown>, k: string, onde: string): true | undefined {
+	const v = r[k];
+	if (v === undefined || v === false) return undefined;
+	if (v !== true) return fail(onde, `o campo "${k}" precisa ser verdadeiro ou falso`);
+	return true;
+}
+
+function parseAulaSigaa(raw: unknown, onde: string): AulaSigaa {
+	if (!isObj(raw)) return fail(onde, "dados do SIGAA inválidos");
+	const s: AulaSigaa = { titulo: str(raw, "titulo", onde) };
+	const fim = optData(raw, "fim", onde);
+	if (fim !== undefined) s.fim = fim;
+	if (optVerdade(raw, "prova", onde)) s.prova = true;
+	if (optVerdade(raw, "cancelada", onde)) s.cancelada = true;
+	return s;
 }
 
 function parseAvaliacao(raw: unknown, onde: string): Avaliacao {
@@ -315,6 +360,23 @@ function parseAvaliacao(raw: unknown, onde: string): Avaliacao {
 	if (peso !== undefined) av.peso = peso;
 	const observacoes = optStr(raw, "observacoes", onde);
 	if (observacoes !== undefined) av.observacoes = observacoes;
+	const origemData = optStr(raw, "origemData", onde);
+	if (origemData !== undefined) {
+		if (!(ORIGENS_DATA as readonly string[]).includes(origemData)) fail(onde, `o campo "origemData" precisa ser sigaa, manual ou plano`);
+		av.origemData = origemData as OrigemData;
+	}
+	const sigaaId = optStr(raw, "sigaaId", onde);
+	if (sigaaId !== undefined) av.sigaaId = sigaaId;
+	const hora = optStr(raw, "hora", onde);
+	if (hora !== undefined) {
+		if (!HORA_RE.test(hora)) fail(onde, `o campo "hora" precisa estar no formato HH:MM`);
+		av.hora = hora;
+	}
+	if (raw.escopoManual !== undefined) {
+		const m = raw.escopoManual;
+		if (!isObj(m)) return fail(onde, `o escopo manual de "${id}" é inválido`);
+		av.escopoManual = { incluidos: slugList(m.incluidos, `${onde} (escopo manual de ${id})`), excluidos: slugList(m.excluidos, `${onde} (escopo manual de ${id})`) };
+	}
 	return av;
 }
 
@@ -357,6 +419,14 @@ export function parseTurma(raw: unknown): Turma {
 	if (recuperacao !== undefined) t.recuperacao = recuperacao;
 	const metodologia = optStr(raw, "metodologia", onde);
 	if (metodologia !== undefined) t.metodologia = metodologia;
+	if (raw.sigaa !== undefined) {
+		const s = raw.sigaa;
+		if (!isObj(s)) return fail(onde, "dados do SIGAA inválidos");
+		const sigaa: NonNullable<Turma["sigaa"]> = { idTurma: str(s, "idTurma", onde), sincronizadoEm: str(s, "sincronizadoEm", onde) };
+		const sufixo = optStr(s, "sufixo", onde);
+		if (sufixo !== undefined) sigaa.sufixo = sufixo;
+		t.sigaa = sigaa;
+	}
 	return t;
 }
 
@@ -377,6 +447,12 @@ export function parseReferencias(raw: unknown): Referencias {
 		const entry: Referencias["arquivos"][number] = { arquivo, topicos: slugList(x.topicos, `${onde} (${arquivo})`), sha256 };
 		const titulo = optStr(x, "titulo", onde);
 		if (titulo !== undefined) entry.titulo = titulo;
+		const sigaaId = optStr(x, "sigaaId", onde);
+		if (sigaaId !== undefined) entry.sigaaId = sigaaId;
+		if (x.aula !== undefined) {
+			if (typeof x.aula !== "number" || !Number.isInteger(x.aula) || x.aula < 1) fail(onde, `a aula de "${arquivo}" precisa ser um número inteiro a partir de 1`);
+			entry.aula = x.aula as number;
+		}
 		return entry;
 	});
 	return { formato: 1, arquivos };
