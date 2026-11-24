@@ -71,7 +71,8 @@ export function composeUfjContextText(i: UfjContextTextInput): string {
 	linhaAvaliacao += ".";
 	const linhas = [
 		"[Contexto UFJ] — sessão criada pela biblioteca do aluno.",
-		`Disciplina: ${materia.codigo} ${materia.nome} — ${materia.curso}, UFJ. Professor(a): ${turma.docente.nome}. Semestre: ${turma.semestre}.`,
+		// Turmas do SIGAA podem vir sem curso e sem docente: a linha só diz o que sabe.
+		`Disciplina: ${materia.codigo} ${materia.nome}${materia.curso.trim() ? ` — ${materia.curso}` : ""}, UFJ.${turma.docente.nome.trim() ? ` Professor(a): ${turma.docente.nome}.` : ""} Semestre: ${turma.semestre}.`,
 		linhaAvaliacao,
 		`Tópico: ${topico.titulo}${topico.descricao ? ` — ${topico.descricao}` : ""}`,
 	];

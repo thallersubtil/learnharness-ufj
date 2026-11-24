@@ -13,6 +13,8 @@ import { Button } from "@/components/ui/button";
 import { Aviso, BibliotecaPagina, Secao, lerResposta, textoDias } from "./comum";
 import { MateriaisForm } from "./materiais-form";
 import { PlanoForm } from "./plano-form";
+import { ProvasSigaa, type AcoesProvas } from "./provas-sigaa";
+import { TopicosDeAula } from "./topicos-de-aula";
 
 const COM_PREPARACAO = new Set<string>(TIPOS_COM_ESCOPO);
 
@@ -23,9 +25,27 @@ interface TurmaDados {
 	arquivos: string[];
 }
 
-export function TurmaView({ dados, hoje, onEditar }: { dados: TurmaDados; hoje: Date; onEditar: () => void }) {
+const SEM_ACOES: AcoesProvas = { onData: () => {}, onAdicionar: () => {}, onEscopo: () => {} };
+
+export function TurmaView({ dados, hoje, onEditar, acoes }: { dados: TurmaDados; hoje: Date; onEditar: () => void; acoes?: AcoesProvas }) {
 	const { materia, turma } = dados;
 	const base = `/biblioteca/${encodeURIComponent(materia.codigo)}/${encodeURIComponent(turma.id)}`;
+	// Turma montada pelo SIGAA: o cronograma vem de lá, então não há "Editar plano".
+	if (turma.sigaa) {
+		return (
+			<div className="space-y-2">
+				<p className="text-sm text-muted-foreground">
+					{materia.codigo} · {turma.semestre}{turma.docente.nome ? ` · ${turma.docente.nome}` : ""} · do SIGAA
+				</p>
+				<Secao titulo="Provas">
+					<ProvasSigaa materia={materia} turma={turma} hoje={hoje} {...(acoes ?? SEM_ACOES)} />
+				</Secao>
+				<Secao titulo="Tópicos de aula">
+					<TopicosDeAula turma={turma} referencias={dados.referencias} />
+				</Secao>
+			</div>
+		);
+	}
 	return (
 		<div className="space-y-2">
 			<p className="text-sm text-muted-foreground">
@@ -74,6 +94,21 @@ export function TurmaScreen({ codigo, turmaId }: { codigo: string; turmaId: stri
 	useEffect(carregar, [carregar]);
 	useServerEvent("biblioteca-changed", carregar);
 
+	async function mudar(caminho: string, metodo: "PUT" | "POST", corpo: unknown) {
+		setErro(null);
+		try {
+			await lerResposta(await fetch(`${url}/avaliacoes${caminho}`, { method: metodo, headers: { "Content-Type": "application/json" }, body: JSON.stringify(corpo) }));
+			carregar();
+		} catch (e) {
+			setErro((e as Error).message);
+		}
+	}
+	const acoes: AcoesProvas = {
+		onData: (id, data) => void mudar(`/${encodeURIComponent(id)}`, "PUT", { data }),
+		onAdicionar: (entrada) => void mudar("", "POST", entrada),
+		onEscopo: (id, topicos) => void mudar(`/${encodeURIComponent(id)}`, "PUT", { topicos }),
+	};
+
 	async function salvarEdicao() {
 		if (!edicao) return;
 		setSalvando(true);
@@ -98,7 +133,7 @@ export function TurmaScreen({ codigo, turmaId }: { codigo: string; turmaId: stri
 			{!dados && !erro && <p className="text-sm text-muted-foreground">Carregando…</p>}
 			{dados && !edicao && (
 				<>
-					<TurmaView dados={dados} hoje={new Date()} onEditar={() => setEdicao({ materia: dados.materia, turma: dados.turma })} />
+					<TurmaView dados={dados} hoje={new Date()} onEditar={() => setEdicao({ materia: dados.materia, turma: dados.turma })} acoes={acoes} />
 					<Secao titulo="Materiais">
 						<MateriaisForm codigo={codigo} turmaId={turmaId} materia={dados.materia} arquivos={dados.arquivos} referencias={dados.referencias} onAtualizar={carregar} />
 					</Secao>

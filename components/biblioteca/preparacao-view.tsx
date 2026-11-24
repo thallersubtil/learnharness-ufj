@@ -14,14 +14,17 @@ import { formatarData, formatarDataCurta, type Passo, type PreparacaoView, type 
 import { SessionStarter } from "@/components/start-session";
 import { useServerEvent } from "@/components/server-events";
 import { Button } from "@/components/ui/button";
+import { DataEditavel } from "./data-editavel";
 import { Input } from "@/components/ui/input";
 import { Aviso, BibliotecaPagina, Secao, lerResposta, textoDias } from "./comum";
 
-export function PreparacaoTela({ view, onAprender, onPraticar, onHoras, ocupado = false }: {
+export function PreparacaoTela({ view, onAprender, onPraticar, onHoras, onData, ocupado = false }: {
 	view: PreparacaoView;
 	onAprender: (t: TopicoPreparacao) => void;
 	onPraticar: (t: TopicoPreparacao) => void;
 	onHoras: (horas: number | null) => void;
+	/** Mudar a data da prova daqui mesmo (spec SIGAA §7.5). */
+	onData?: (data: string | null) => void;
 	ocupado?: boolean;
 }) {
 	const [horas, setHoras] = useState(view.horas === null ? "" : String(view.horas).replace(".", ","));
@@ -40,11 +43,11 @@ export function PreparacaoTela({ view, onAprender, onPraticar, onHoras, ocupado 
 			<div className="rounded-lg border px-4 py-3">
 				<div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
 					<span className="font-title text-xl">{avaliacao.nome}</span>
-					{avaliacao.data && <span className="text-sm">{formatarData(avaliacao.data)}</span>}
+					{onData ? <DataEditavel data={avaliacao.data} origem={avaliacao.origemData} onSalvar={onData} /> : avaliacao.data && <span className="text-sm">{formatarData(avaliacao.data)}</span>}
 					<span className="text-sm font-medium">{textoDias(view.dias)}</span>
 				</div>
 				<p className="mt-1 text-sm text-muted-foreground">
-					{view.materia.nome} · {view.turma.docente}
+					{view.materia.nome}{view.turma.docente ? ` · ${view.turma.docente}` : ""}
 					{avaliacao.pontos !== undefined && ` · ${String(avaliacao.pontos).replace(".", ",")} pontos`}
 					{avaliacao.duracaoMin !== undefined && ` · ${avaliacao.duracaoMin} min`}
 				</p>
@@ -136,6 +139,19 @@ export function PreparacaoScreen({ codigo, turmaId, avaliacaoId }: { codigo: str
 		}
 	}
 
+	async function data(valor: string | null) {
+		try {
+			await lerResposta(await fetch(`/api/biblioteca/materias/${encodeURIComponent(codigo)}/turmas/${encodeURIComponent(turmaId)}/avaliacoes/${encodeURIComponent(avaliacaoId)}`, {
+				method: "PUT",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ data: valor }),
+			}));
+			carregar();
+		} catch (e) {
+			setErro((e as Error).message);
+		}
+	}
+
 	async function horas(valor: number | null) {
 		try {
 			await lerResposta(await fetch("/api/biblioteca/preparacao", {
@@ -156,7 +172,7 @@ export function PreparacaoScreen({ codigo, turmaId, avaliacaoId }: { codigo: str
 		>
 			{erro && <Aviso tom="erro">{erro}</Aviso>}
 			{!view && !erro && <p className="text-sm text-muted-foreground">Carregando…</p>}
-			{view && <PreparacaoTela key={`${view.avaliacao.id}:${view.horas}`} view={view} ocupado={ocupado} onAprender={(t) => void abrir(t, "teach")} onPraticar={(t) => void abrir(t, "practice")} onHoras={(h) => void horas(h)} />}
+			{view && <PreparacaoTela key={`${view.avaliacao.id}:${view.horas}`} view={view} ocupado={ocupado} onAprender={(t) => void abrir(t, "teach")} onPraticar={(t) => void abrir(t, "practice")} onHoras={(h) => void horas(h)} onData={(d) => void data(d)} />}
 		</BibliotecaPagina>
 	);
 }

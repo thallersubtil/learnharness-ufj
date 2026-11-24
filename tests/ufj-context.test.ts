@@ -59,6 +59,15 @@ describe("texto do contexto UFJ", () => {
 		].join("\n"));
 	});
 
+	it("linha da disciplina sem curso e sem docente (turma do SIGAA)", () => {
+		const { materia, turma } = fixture();
+		const texto = core.composeUfjContextText({
+			materia: { ...materia, nome: "Disciplina Teste", curso: "" }, turma: { ...turma, docente: { nome: "", slug: "sigaa" } },
+			avaliacao: turma.avaliacoes[0]!, topico: materia.topicos[0]!, aulas: [], referencias: [], dias: null, horas: null,
+		});
+		assert.equal(texto.split("\n")[1], "Disciplina: ICE0001 Disciplina Teste, UFJ. Semestre: 2026-2.");
+	});
+
 	it("omite as linhas sem dado e escreve hoje, falta 1 dia e já passou", () => {
 		const { materia, turma } = fixture();
 		const base = { materia: { ...materia, bibliografia: { basica: [], complementar: [], virtual: [] } }, turma, avaliacao: turma.avaliacoes[0]!, topico: materia.topicos[0]!, aulas: [turma.aulas[0]!], referencias: [], horas: null };
