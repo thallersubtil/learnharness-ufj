@@ -325,6 +325,35 @@ export interface UsoBiblioteca {
 }
 
 /** O estudo pessoal (config.ESTUDO_DIR): fica fora da biblioteca compartilhada. */
+// ─── SigaaStore — conta UFJ e estado da sincronização (spec SIGAA §7.2–7.3) ───
+
+export interface ContaSigaa {
+	usuario: string;
+	/** A senha cifrada pelo chaveiro do sistema (nunca a senha em claro). */
+	senhaCifrada: string;
+}
+
+export type SituacaoSigaa = "sem-conta" | "ocioso" | "sincronizando" | "senha-recusada" | "erro";
+
+export interface EstadoSigaa {
+	situacao: SituacaoSigaa;
+	usuario?: string;
+	ultimaTentativa?: string;
+	ultimoSucesso?: string;
+	erro?: string;
+	avisos: string[];
+}
+
+/** Sob config.SIGAA_DIR, escrita atômica com permissão 0600. */
+export interface SigaaStore {
+	readConta(): ContaSigaa | null;
+	writeConta(c: ContaSigaa): void;
+	apagarConta(): void;
+	/** Sem arquivo: `{ situacao: "sem-conta", avisos: [] }`. */
+	readEstado(): EstadoSigaa;
+	writeEstado(e: EstadoSigaa): void;
+}
+
 export interface EstudoStore {
 	readHoras(chave: string): number | null;
 	writeHoras(chave: string, horas: number | null): void;

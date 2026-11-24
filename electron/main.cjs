@@ -30,6 +30,7 @@ const { createChatGPT, fileStore } = require("./chatgpt.cjs");
 const { attachChatGPTChild, trustedSender, chatGPTControl } = require("./chatgpt-ipc.cjs");
 const { createSubscriptions, loadSubscriptionSDK } = require("./subscriptions.cjs");
 const { attachSubscriptionChild, subscriptionControl } = require("./subscription-ipc.cjs");
+const { attachSegredoChild } = require("./segredo-ipc.cjs");
 const { desktopAPIHeaders } = require("./desktop-api.cjs");
 const { openWebSubscriptionBrowser } = require("./web-subscription-browser.cjs");
 const { randomBytes } = require("node:crypto");
@@ -154,6 +155,8 @@ let chatgpt = null;
 let chatgptChild = null;
 let subscriptions = null;
 let subscriptionChild = null;
+/** Senha do SIGAA: o servidor pede para cifrar/decifrar pelo chaveiro (UFJ, 2026-11-24). */
+let segredoChild = null;
 // Per-launch request capability, never OAuth tokens and never renderer state.
 let desktopAPISecret = null;
 let reopenWindow = null;
@@ -244,6 +247,7 @@ function startServer(port) {
 		serverProcess = child;
 		chatgptChild = attachChatGPTChild(child, chatgpt);
 		subscriptionChild = attachSubscriptionChild(child, subscriptions);
+		segredoChild = attachSegredoChild(child);
 		const fwd = (buf) => buf.toString().trimEnd().split("\n").forEach((l) => l && log(`server: ${l}`));
 		child.stdout.on("data", fwd);
 		child.stderr.on("data", fwd);
@@ -254,6 +258,8 @@ function startServer(port) {
 			chatgptChild = null;
 			subscriptionChild?.dispose();
 			subscriptionChild = null;
+			segredoChild?.dispose();
+			segredoChild = null;
 			chatgpt?.close();
 			subscriptions?.close();
 		});

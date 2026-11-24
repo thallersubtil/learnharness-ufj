@@ -155,6 +155,12 @@ export const BIBLIOTECA_DIR = path.join(/* turbopackIgnore: true */ DATA_ROOT, "
 export const ESTUDO_DIR = path.join(/* turbopackIgnore: true */ DATA_ROOT, "estudo");
 
 /**
+ * Conta UFJ (spec SIGAA §7.2): o usuário, a senha CIFRADA pelo chaveiro do
+ * sistema e o estado da última sincronização com o SIGAA. Arquivos 0600.
+ */
+export const SIGAA_DIR = path.join(/* turbopackIgnore: true */ DATA_ROOT, "sigaa");
+
+/**
  * THE AUTH/KEY STORE (auth-keys wave, 2026-09-19): BYOK provider keys in a
  * flat {VAR: value} JSON map — the SAME file the Electron app has always
  * hand-edited (owner decision: option A, zero migration). Desktop main.cjs
