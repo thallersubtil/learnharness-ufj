@@ -32,6 +32,8 @@ export { themeStore } from "../store/themes.ts";
 // Biblioteca UFJ (spec Etapa A): serviço de IA e transporte HTTP.
 export { createBibliotecaIa, bibliotecaIa, resolveBibliotecaEngine, type BibliotecaIa, type RascunhoPlano, type SugestoesMateriais } from "./biblioteca-ia.ts";
 export * from "./biblioteca-rotas.ts";
+export * from "./sigaa/rotas.ts";
+export { createSincronizacao, sincronizacao, type Sincronizacao, type SincronizacaoDeps } from "./sigaa/sincronizar.ts";
 export { createBibliotecaService, bibliotecaService, type BibliotecaService, type BibliotecaListagem } from "./biblioteca.ts";
 export { graphContextMessageFor, sanitizeGraphPicks, GRAPH_CONTEXT_PICK_LIMIT } from "./graph-context.ts";
 export { chaveHoras, parseUfjContextRef, practicePicksForTopico, preparacaoView, resolveUfjRef, salvarHoras, ufjMarkerFor, type PreparacaoDeps } from "./preparacao.ts";

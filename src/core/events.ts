@@ -25,6 +25,8 @@ export interface ServerEvents {
 	"sources-changed": Record<string, never>;
 	/** A biblioteca UFJ mudou (matéria, turma ou materiais gravados). */
 	"biblioteca-changed": Record<string, never>;
+	/** A conta UFJ ou o estado da sincronização com o SIGAA mudou. Sem dados da conta no barramento. */
+	"sigaa-changed": Record<string, never>;
 	/** Web subscription state changed. No account or credential data on the bus. */
 	"subscriptions-changed": Record<string, never>;
 	/** A chat's record changed WITHOUT a turn (the silent dismissal write).
@@ -57,6 +59,7 @@ export const SERVER_EVENT_TYPES = [
 	"chats-changed",
 	"sources-changed",
 	"biblioteca-changed",
+	"sigaa-changed",
 	"subscriptions-changed",
 	"record-changed",
 	"compaction-changed",
