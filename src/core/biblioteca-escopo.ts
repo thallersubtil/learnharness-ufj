@@ -63,6 +63,9 @@ export function computeEscopos(avaliacoes: readonly Avaliacao[], aulas: readonly
 		.filter((x): x is { id: string; pos: number } => x.pos !== null)
 		.sort((x, y) => x.pos - y.pos);
 	const todos = topicosEntre(aulas, -Infinity, Infinity);
+	// Aulas que são provas no SIGAA ("Avaliação da aprendizagem") também
+	// encerram o escopo da prova seguinte, mesmo sem prova do app ligada a elas.
+	const limites = aulas.filter((a) => a.sigaa?.prova).map((a) => a.ordem);
 	const out = avaliacoes.map((a): Avaliacao => {
 		if (COBRE_TUDO.has(a.tipo)) return { ...a, escopo: { topicos: todos } };
 		if (!REGULARES.has(a.tipo)) return { ...a, escopo: { topicos: [] } };
@@ -71,10 +74,29 @@ export function computeEscopos(avaliacoes: readonly Avaliacao[], aulas: readonly
 			avisos.push(`A avaliação ${a.id} não tem data nem aula no cronograma: defina o escopo à mão.`);
 			return { ...a, escopo: { topicos: [] } };
 		}
-		const anterior = i > 0 ? regulares[i - 1]!.pos : -Infinity;
-		return { ...a, escopo: { topicos: topicosEntre(aulas, anterior, regulares[i]!.pos) } };
+		const pos = regulares[i]!.pos;
+		const anterior = Math.max(-Infinity, ...regulares.slice(0, i).map((x) => x.pos), ...limites.filter((p) => p < pos));
+		return { ...a, escopo: { topicos: topicosEntre(aulas, anterior, pos) } };
 	});
 	return { avaliacoes: out, avisos };
+}
+
+/** Tira o que o aluno excluiu e acrescenta, no fim, o que ele incluiu. */
+export function aplicarEscopoManual(calculado: string[], manual?: Avaliacao["escopoManual"]): string[] {
+	if (!manual) return calculado;
+	const fora = new Set(manual.excluidos);
+	const out = calculado.filter((t) => !fora.has(t));
+	for (const t of manual.incluidos) if (!out.includes(t)) out.push(t);
+	return out;
+}
+
+/** Numera as provas e recalcula os escopos de uma turma do SIGAA (spec SIGAA §7.6).
+ *  Turma sem `sigaa` (plano importado) volta igual: lá o escopo é escolhido à mão. */
+export function recalcularTurma(turma: Turma): Turma {
+	if (!turma.sigaa) return turma;
+	const numeradas = computePosicoes(turma.avaliacoes, turma.aulas);
+	const { avaliacoes } = computeEscopos(numeradas, turma.aulas);
+	return { ...turma, avaliacoes: avaliacoes.map((a) => ({ ...a, escopo: { topicos: aplicarEscopoManual(a.escopo.topicos, a.escopoManual) } })) };
 }
 
 export interface TopicoProposto {
