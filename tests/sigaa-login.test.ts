@@ -5,7 +5,7 @@ import { after, describe, it } from "node:test";
 import { SIGAA_BASE, SigaaSessao, baseDoSigaa, corpoLatin1 } from "../src/server/sigaa/http.ts";
 import { linkJsf } from "../src/server/sigaa/jsf.ts";
 import { entrar } from "../src/server/sigaa/login.ts";
-import { SigaaEstruturaError, SigaaSenhaRecusadaError } from "../src/server/sigaa/erros.ts";
+import { SigaaEstruturaError, SigaaIndisponivelError, SigaaSenhaRecusadaError } from "../src/server/sigaa/erros.ts";
 import { iniciarSigaaFalso, type SigaaFalso } from "./helpers/sigaa-falso.ts";
 
 const abertos: SigaaFalso[] = [];
@@ -75,6 +75,33 @@ describe("login no SIGAA", () => {
 		assert.equal(pedidos[2]!.cookie, null, "o servidor de arquivos não recebe cookie nenhum");
 		await s.get("/sigaa/inicio");
 		assert.equal(pedidos[3]!.cookie, "JSESSIONID=abc", "cookie do servidor de arquivos não entra na sessão");
+	});
+
+	it("o tempo limite vale também para o corpo: uma resposta que para de chegar desiste (revisão final, #10)", async () => {
+		const fetchFalso = (async (_u: URL | string, init?: RequestInit) => new Response(new ReadableStream({
+			start(c) {
+				c.enqueue(new Uint8Array(4));
+				init?.signal?.addEventListener("abort", () => c.error(new Error("abortado")));
+			},
+		}), { headers: { "Content-Type": "application/pdf" } })) as typeof fetch;
+		const s = new SigaaSessao({ base: SIGAA_BASE, esperarMs: 0, fetch: fetchFalso, timeoutMs: 50 });
+		await assert.rejects(s.get("/sigaa/x"), SigaaIndisponivelError);
+	});
+
+	it("um arquivo grande que chega devagar, mas sem parar, não é interrompido", async () => {
+		const fetchFalso = (async () => {
+			let n = 0;
+			return new Response(new ReadableStream({
+				async pull(c) {
+					await new Promise((r) => setTimeout(r, 30));
+					if (n++ < 8) c.enqueue(new Uint8Array(1024));
+					else c.close();
+				},
+			}), { headers: { "Content-Type": "application/pdf" } });
+		}) as typeof fetch;
+		const s = new SigaaSessao({ base: SIGAA_BASE, esperarMs: 0, fetch: fetchFalso, timeoutMs: 100 });
+		const r = await s.get("/sigaa/x");
+		assert.equal(r.bytes.length, 8 * 1024, "8 pedaços em ~270 ms, com no máximo 100 ms de silêncio");
 	});
 
 	it("o servidor de arquivos só vale como destino de redirecionamento, e só com a base real", async () => {

@@ -31,6 +31,8 @@ export interface OpcoesSigaaFalso {
 	portalSemTurmas?: boolean;
 	/** A página principal desta turma vem sem nenhum tópico de aula. */
 	semTopicos?: string;
+	/** O arquivo 5001 tem 27 MiB (acima do limite antigo de 26 MiB). */
+	arquivoGrande?: boolean;
 	/** Como o SIGAA real: o download responde 301 para um servidor de arquivos separado. */
 	arquivosEmOutroHost?: boolean;
 	/** Porta fixa (só para o script de desenvolvimento); sem ela, uma porta livre. */
@@ -289,7 +291,8 @@ function tratarTurma(c: ContextoTurma): boolean {
 	if (caminho === "/sigaa/ava/ArquivoTurma/listar_discente.jsf" && form.has("formAva") && paginas) {
 		const vs = form.get("javax.faces.ViewState") ?? "";
 		const feitos = s.downloads.get(vs) ?? 0;
-		const arq = ARQUIVOS_FALSOS[form.get("id") ?? ""];
+		const id = form.get("id") ?? "";
+		const arq = opcoes.arquivoGrande && id === "5001" ? { ...ARQUIVOS_FALSOS[id]!, corpo: Buffer.alloc(27 * 1024 * 1024, 0x25) } : ARQUIVOS_FALSOS[id];
 		if (!c.viewStateValido() || !arq || (opcoes.umDownloadPorPagina && feitos >= 1)) {
 			c.html(paginas.principal);
 			return true;

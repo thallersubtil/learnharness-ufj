@@ -69,6 +69,11 @@ function charsetDe(tipo: string): string {
 	return c === "utf-8" || c === "utf8" ? "utf-8" : "windows-1252";
 }
 
+interface Vigia {
+	reiniciar(): void;
+	parar(): void;
+}
+
 export class SigaaSessao {
 	private readonly base: URL;
 	private readonly esperarMs: number;
@@ -103,7 +108,8 @@ export class SigaaSessao {
 		throw new SigaaEstruturaError(redirecionamento ? `redirecionamento para outro endereço (${u.origin})` : `endereço fora do SIGAA (${u.origin})`);
 	}
 
-	private async pedir(url: URL, init: { method: string; headers?: Record<string, string>; body?: string }): Promise<Response> {
+	/** Um pedido com o relógio de silêncio: `timeoutMs` sem resposta ou sem bytes do corpo, e desiste. */
+	private async pedir(url: URL, init: { method: string; headers?: Record<string, string>; body?: string }): Promise<{ res: Response; vigia: Vigia }> {
 		if (this.esperarMs > 0) await new Promise((r) => setTimeout(r, this.esperarMs));
 		const headers: Record<string, string> = { "User-Agent": UA, Accept: "text/html,application/xhtml+xml,*/*;q=0.8", "Accept-Language": "pt-BR,pt;q=0.9", ...(init.headers ?? {}) };
 		// A sessão do SIGAA só vai para o SIGAA (o servidor de arquivos não recebe cookie).
@@ -111,7 +117,14 @@ export class SigaaSessao {
 		const cookie = [...this.cookies].map(([k, v]) => `${k}=${v}`).join("; ");
 		if (cookie && doSigaa) headers.Cookie = cookie;
 		const controller = new AbortController();
-		const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+		let timer = setTimeout(() => controller.abort(), this.timeoutMs);
+		const vigia: Vigia = {
+			reiniciar: () => {
+				clearTimeout(timer);
+				timer = setTimeout(() => controller.abort(), this.timeoutMs);
+			},
+			parar: () => clearTimeout(timer),
+		};
 		try {
 			const res = await this.fetchFn(url, { method: init.method, headers, body: init.body, redirect: "manual", signal: controller.signal });
 			for (const h of doSigaa ? res.headers.getSetCookie() : []) {
@@ -119,30 +132,57 @@ export class SigaaSessao {
 				const i = par.indexOf("=");
 				if (i > 0) this.cookies.set(par.slice(0, i).trim(), par.slice(i + 1).trim());
 			}
-			return res;
+			return { res, vigia };
+		} catch {
+			vigia.parar();
+			throw new SigaaIndisponivelError();
+		}
+	}
+
+	/** Lê o corpo inteiro; o relógio recomeça a cada pedaço, então um arquivo grande
+	 *  que chega devagar não é interrompido, mas uma resposta que para de chegar é. */
+	private async lerCorpo(res: Response, vigia: Vigia): Promise<Uint8Array> {
+		const partes: Uint8Array[] = [];
+		let total = 0;
+		try {
+			const leitor = res.body?.getReader();
+			while (leitor) {
+				vigia.reiniciar();
+				const { done, value } = await leitor.read();
+				if (done) break;
+				partes.push(value);
+				total += value.length;
+			}
 		} catch {
 			throw new SigaaIndisponivelError();
 		} finally {
-			clearTimeout(timer);
+			vigia.parar();
 		}
+		const bytes = new Uint8Array(total);
+		let pos = 0;
+		for (const p of partes) {
+			bytes.set(p, pos);
+			pos += p.length;
+		}
+		return bytes;
 	}
 
 	private async navegar(caminhoOuUrl: string, init: { method: string; headers?: Record<string, string>; body?: string }): Promise<Pagina> {
 		let atual = this.resolver(caminhoOuUrl);
-		let res = await this.pedir(atual, init);
+		let { res, vigia } = await this.pedir(atual, init);
 		for (let i = 0; i < 10 && res.status >= 300 && res.status < 400; i++) {
 			const loc = res.headers.get("location");
 			if (!loc) break;
+			vigia.parar();
+			await res.body?.cancel().catch(() => {});
 			atual = this.resolver(loc, atual.toString(), true);
-			res = await this.pedir(atual, { method: "GET" });
+			({ res, vigia } = await this.pedir(atual, { method: "GET" }));
 		}
-		if (res.status >= 300 && res.status < 400) throw new SigaaEstruturaError("redirecionamentos demais");
-		let bytes: Uint8Array;
-		try {
-			bytes = new Uint8Array(await res.arrayBuffer());
-		} catch {
-			throw new SigaaIndisponivelError();
+		if (res.status >= 300 && res.status < 400) {
+			vigia.parar();
+			throw new SigaaEstruturaError("redirecionamentos demais");
 		}
+		const bytes = await this.lerCorpo(res, vigia);
 		const tipo = res.headers.get("content-type") ?? "";
 		const ehPagina = tipo === "" || /html|xml/i.test(tipo);
 		return { url: atual.toString(), status: res.status, tipo, bytes, html: ehPagina ? new TextDecoder(charsetDe(tipo)).decode(bytes) : "", headers: res.headers };

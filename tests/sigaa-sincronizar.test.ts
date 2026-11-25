@@ -34,12 +34,11 @@ beforeEach(() => {
 const TURMA = "2026-2-turma-ta";
 let emitidos = 0;
 
-async function montar(opcoes: OpcoesSigaaFalso = {}, compartilhado?: { andamento: Promise<void> | null }, extra: { biblioteca?: typeof bibliotecaStore; tamanhoMaximo?: number } = {}) {
+async function montar(opcoes: OpcoesSigaaFalso = {}, compartilhado?: { andamento: Promise<void> | null }, extra: { biblioteca?: typeof bibliotecaStore } = {}) {
 	const f = await iniciarSigaaFalso(opcoes);
 	abertos.push(f);
 	const s = createSincronizacao({
 		...(compartilhado ? { compartilhado } : {}),
-		...(extra.tamanhoMaximo !== undefined ? { tamanhoMaximo: extra.tamanhoMaximo } : {}),
 		biblioteca: extra.biblioteca ?? bibliotecaStore,
 		sigaa: sigaaStore,
 		cifrar: async (t) => `teste:${t}`,
@@ -285,6 +284,20 @@ describe("sincronização", () => {
 		assert.ok(s.estado().avisos.includes('Não consegui guardar "Ficha de avaliação.docx" de Cálculo Teste: disco cheio'), JSON.stringify(s.estado().avisos));
 		assert.equal(bibliotecaStore.readReferencias("ICE0001", TURMA).arquivos.length, 3);
 		assert.ok(bibliotecaStore.readTurma("ICE0001", TURMA));
+	});
+
+	it("arquivo grande é baixado uma vez, guardado e não é baixado de novo (pedido do dono)", async () => {
+		const { f, s } = await montar({ arquivoGrande: true });
+		await s.conectar("aluno.teste", "segredo");
+		await s.emAndamento();
+		const grande = bibliotecaStore.readReferencias("ICE0001", TURMA).arquivos.find((a) => a.sigaaId === "5001")!;
+		assert.ok(grande, "o arquivo grande está nos materiais");
+		assert.equal(fs.statSync(bibliotecaStore.referenciaPath("ICE0001", TURMA, grande.arquivo)).size, 27 * 1024 * 1024);
+		assert.ok(!s.estado().avisos.some((a) => /grande/.test(a)), JSON.stringify(s.estado().avisos));
+		const antes = downloads(f);
+		s.sincronizarAgora();
+		await s.emAndamento();
+		assert.equal(downloads(f), antes, "nenhum download repetido");
 	});
 
 	it("senha guardada recusada: senha-recusada e não tenta de novo", async () => {

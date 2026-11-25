@@ -60,7 +60,6 @@ export interface OpcoesLeitura {
 	jaBaixado: (lida: Pick<SigaaTurmaLida, "codigo" | "semestre" | "sufixo">, sigaaId: string) => boolean;
 	/** Chamada (síncrona) ao fim de cada turma, com os arquivos novos dela; quem grava é o chamador. */
 	aoLerTurma: (lida: SigaaTurmaLida, baixados: ArquivoBaixado[]) => void;
-	tamanhoMaximo: number;
 	/** Chamada a cada turma e a cada arquivo baixado, para a barra de progresso. */
 	progresso?: (p: ProgressoLeitura) => void;
 }
@@ -138,10 +137,6 @@ async function lerTurma(sessao: SigaaSessao, portal: Pagina, t: TurmaNoPortal, o
 		}
 		if (!ehArquivo(r)) {
 			avisos.push(`Não consegui baixar "${arq.titulo}".`);
-			continue;
-		}
-		if (r.bytes.length > opcoes.tamanhoMaximo) {
-			avisos.push(`"${arq.titulo}" tem mais de ${Math.round(opcoes.tamanhoMaximo / (1024 * 1024))} MB e não foi baixado.`);
 			continue;
 		}
 		const nome = nomeDoArquivo(r.headers.get("content-disposition") ?? "", arq.titulo);

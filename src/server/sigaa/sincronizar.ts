@@ -9,7 +9,6 @@
  * edição do aluno feita durante a leitura é lida e fundida, não sobrescrita.
  */
 
-import { MAX_IMPORT_BODY_BYTES } from "../../../lib/notes-import-limits.ts";
 import { BibliotecaEntradaError } from "../../core/biblioteca.ts";
 import { emit } from "../../core/events.ts";
 import type { BibliotecaStore, EstadoSigaa, SigaaStore } from "../../core/ports.ts";
@@ -41,8 +40,6 @@ export interface SincronizacaoDeps {
 	/** Onde fica a sincronização em andamento. Em produção, um só para o processo
 	 *  inteiro (cada rota do Next pode ter sua cópia deste módulo). */
 	compartilhado?: EmAndamento;
-	/** Maior arquivo que se baixa (padrão: o limite das importações, 26 MiB). */
-	tamanhoMaximo?: number;
 }
 
 /** A sincronização em andamento e o seu progresso (só na memória). */
@@ -133,7 +130,6 @@ export function createSincronizacao(deps: SincronizacaoDeps) {
 			const leitura = await lerSigaa(sessao, portal, {
 				jaBaixado: (l, sigaaId) => deps.biblioteca.readReferencias(l.codigo, idTurmaSigaa(l.semestre, l.sufixo)).arquivos.some((a) => a.sigaaId === sigaaId),
 				aoLerTurma: (lida, baixados) => aoLerTurma(lida, baixados, avisos),
-				tamanhoMaximo: deps.tamanhoMaximo ?? MAX_IMPORT_BODY_BYTES,
 				progresso: (p) => {
 					em.progresso = progressoDaLeitura(p);
 					deps.emitir(true);

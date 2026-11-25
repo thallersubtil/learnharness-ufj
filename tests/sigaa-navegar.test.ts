@@ -22,7 +22,6 @@ async function ler(opcoes: OpcoesSigaaFalso = {}, jaBaixado: (id: string) => boo
 	const leitura = await lerSigaa(sessao, portal, {
 		jaBaixado: (_l, id) => jaBaixado(id),
 		aoLerTurma: (lida, baixados) => lidas.push({ lida, baixados }),
-		tamanhoMaximo: 26 * 1024 * 1024,
 	});
 	return { f, leitura, lidas };
 }
@@ -76,10 +75,20 @@ describe("navegar pelo SIGAA", () => {
 		await lerSigaa(sessao, portal, {
 			jaBaixado: (_l, id) => id === "5001",
 			aoLerTurma: () => {},
-			tamanhoMaximo: 26 * 1024 * 1024,
 			progresso: (p) => passos.push(p.etapa === "turma" ? `turma ${p.turmaAtual}/${p.totalTurmas}` : `arquivo ${p.arquivoAtual}/${p.totalArquivos}`),
 		});
 		assert.deepEqual(passos, ["turma 1/2", "arquivo 1/3", "arquivo 2/3", "arquivo 3/3", "turma 2/2", "arquivo 1/1"]);
+	});
+
+	it("arquivo grande (acima de 26 MiB) é baixado e fica disponível como os outros (pedido do dono)", async () => {
+		const f = await iniciarSigaaFalso({ arquivoGrande: true });
+		abertos.push(f);
+		const sessao = new SigaaSessao({ base: f.base, esperarMs: 0 });
+		const portal = await entrar(sessao, "aluno.teste", "segredo");
+		const baixados: ArquivoBaixado[] = [];
+		const leitura = await lerSigaa(sessao, portal, { jaBaixado: () => false, aoLerTurma: (_l, b) => baixados.push(...b) });
+		assert.deepEqual(leitura.falhas, []);
+		assert.equal(baixados.find((x) => x.sigaaId === "5001")!.bytes.length, 27 * 1024 * 1024);
 	});
 
 	it("aoLerTurma é chamada uma vez por turma, na ordem do portal", async () => {
@@ -115,7 +124,7 @@ describe("navegar pelo SIGAA", () => {
 		const sessao = new SigaaSessao({ base: f.base, esperarMs: 0, origensDeArquivos: [f.origemArquivos!] });
 		const portal = await entrar(sessao, "aluno.teste", "segredo");
 		const lidas: ArquivoBaixado[][] = [];
-		const leitura = await lerSigaa(sessao, portal, { jaBaixado: () => false, aoLerTurma: (_l, b) => lidas.push(b), tamanhoMaximo: 26 * 1024 * 1024 });
+		const leitura = await lerSigaa(sessao, portal, { jaBaixado: () => false, aoLerTurma: (_l, b) => lidas.push(b) });
 		assert.deepEqual(leitura.falhas, []);
 		assert.deepEqual(lidas[0]!.map((x) => x.nome), ["Aula_1_Limites.pdf", "Lista_regra_da_cadeia.pdf", "Exemplos.ipynb.md", "Ficha de avaliação.docx"]);
 		assert.equal(f.pedidosArquivos.length, 5);
@@ -127,7 +136,7 @@ describe("navegar pelo SIGAA", () => {
 		abertos.push(f);
 		const sessao = new SigaaSessao({ base: f.base, esperarMs: 0 });
 		const portal = await entrar(sessao, "aluno.teste", "segredo");
-		const leitura = await lerSigaa(sessao, portal, { jaBaixado: () => false, aoLerTurma: () => {}, tamanhoMaximo: 26 * 1024 * 1024 });
+		const leitura = await lerSigaa(sessao, portal, { jaBaixado: () => false, aoLerTurma: () => {} });
 		assert.equal(leitura.turmasLidas, 0);
 		assert.match(leitura.falhas[0]!.erro, /redirecionamento para outro endereço \(http:\/\/127\.0\.0\.1:\d+\)/);
 	});
