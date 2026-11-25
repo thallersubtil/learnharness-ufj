@@ -1,15 +1,14 @@
 "use client";
 
-/** OS TÓPICOS DE AULA DO SIGAA EM LINHA DO TEMPO (spec SIGAA §7.7), com os
- *  arquivos que o professor pôs em cada um. */
+/** OS TÓPICOS DE AULA DO SIGAA EM LINHA DO TEMPO (spec SIGAA §7.7): só data e
+ *  título; os arquivos ficam na aba de materiais (spec chat+SIGAA §5.6). */
 
-import { formatarDataCurta, type Referencias, type Turma } from "@/src/core";
+import { formatarDataCurta, type Turma } from "@/src/core";
 
-export function TopicosDeAula({ turma, referencias }: { turma: Turma; referencias: Referencias }) {
+export function TopicosDeAula({ turma }: { turma: Turma }) {
 	return (
 		<ol className="space-y-1">
 			{turma.aulas.map((a) => {
-				const arquivos = referencias.arquivos.filter((r) => r.aula === a.ordem);
 				const cancelada = a.sigaa?.cancelada === true;
 				const prova = a.sigaa?.prova === true;
 				return (
@@ -26,11 +25,6 @@ export function TopicosDeAula({ turma, referencias }: { turma: Turma; referencia
 							{cancelada && <span className="text-xs">· não houve aula</span>}
 							{prova && <span className="rounded border px-1.5 text-xs">prova</span>}
 						</div>
-						{arquivos.length > 0 && (
-							<ul className="ml-14 text-xs text-muted-foreground">
-								{arquivos.map((r) => <li key={r.arquivo}>{r.titulo ?? r.arquivo}</li>)}
-							</ul>
-						)}
 					</li>
 				);
 			})}

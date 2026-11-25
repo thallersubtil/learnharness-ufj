@@ -355,6 +355,9 @@ function createWindow(url) {
 			contextIsolation: true,
 			sandbox: true,
 			nodeIntegration: false,
+			// UFJ (spec chat+SIGAA §5.5): o visualizador de PDF do Chromium, para
+			// abrir os materiais do professor dentro do app (iframe).
+			plugins: true,
 			...(process.env.LH_DEV_URL ? { additionalArguments: ["--lh-web-subscriptions"] } : {}),
 			preload: path.join(__dirname, "preload.cjs"),
 		},
