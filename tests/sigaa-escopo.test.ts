@@ -10,6 +10,8 @@ import {
 	definirDataProva,
 	definirEscopoProva,
 	recalcularTurma,
+	removerProva,
+	renomearProva,
 	type Turma,
 } from "../src/core/index.ts";
 import { turmaValida } from "./helpers/biblioteca-fixtures.ts";
@@ -104,6 +106,25 @@ describe("escopo por datas na turma do SIGAA", () => {
 		const t = definirDataProva(recalcularTurma(base), "p1", "2026-09-05");
 		assert.equal(t.aulas[2]!.avaliacaoId, undefined);
 		assert.deepEqual(escopo(t, "p1"), ["derivadas", "regra-da-cadeia"]);
+	});
+
+	it("renomear e apagar prova à mão; a do SIGAA não (revisão final, #14)", () => {
+		const t = recalcularTurma(turmaSigaa());
+		assert.equal(renomearProva(t, "p3", "  3ª prova (prática) ").avaliacoes.find((a) => a.id === "p3")!.nome, "3ª prova (prática)");
+		assert.throws(() => renomearProva(t, "p3", " "), /Dê um nome à prova\./);
+		assert.equal(removerProva(t, "p3").avaliacoes.length, 0);
+		const comSigaa = { ...t, avaliacoes: [...t.avaliacoes, { id: "sigaa-1", nome: "2ª unidade", tipo: "prova-escrita" as const, sigaaId: "1", origemData: "sigaa" as const, data: "2026-09-03", escopo: { topicos: [] } }] };
+		assert.throws(() => renomearProva(comSigaa, "sigaa-1", "x"), /vem do SIGAA/);
+		assert.throws(() => removerProva(comSigaa, "sigaa-1"), /vem do SIGAA e não pode ser apagada aqui/);
+		assert.throws(() => removerProva(t, "zzz"), /Prova não encontrada\./);
+	});
+
+	it("apagar uma prova solta a aula de prova ligada a ela", () => {
+		const base = turmaSigaa();
+		base.aulas[2] = { ...base.aulas[2]!, avaliacaoId: "p1" };
+		base.avaliacoes = [{ id: "p1", nome: "1ª prova", tipo: "prova-escrita", data: "2026-09-03", origemData: "manual", escopo: { topicos: [] } }];
+		const t = removerProva(recalcularTurma(base), "p1");
+		assert.equal(t.aulas[2]!.avaliacaoId, undefined);
 	});
 
 	it("turma sem sigaa não é recalculada", () => {

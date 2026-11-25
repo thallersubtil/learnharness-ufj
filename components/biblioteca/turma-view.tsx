@@ -25,7 +25,7 @@ interface TurmaDados {
 	arquivos: string[];
 }
 
-const SEM_ACOES: AcoesProvas = { onData: () => {}, onAdicionar: () => {}, onEscopo: () => {} };
+const SEM_ACOES: AcoesProvas = { onData: () => {}, onAdicionar: () => {}, onEscopo: () => {}, onRenomear: () => {}, onApagar: () => {} };
 
 export function TurmaView({ dados, hoje, onEditar, acoes }: { dados: TurmaDados; hoje: Date; onEditar: () => void; acoes?: AcoesProvas }) {
 	const { materia, turma } = dados;
@@ -94,10 +94,10 @@ export function TurmaScreen({ codigo, turmaId }: { codigo: string; turmaId: stri
 	useEffect(carregar, [carregar]);
 	useServerEvent("biblioteca-changed", carregar);
 
-	async function mudar(caminho: string, metodo: "PUT" | "POST", corpo: unknown) {
+	async function mudar(caminho: string, metodo: "PUT" | "POST" | "DELETE", corpo?: unknown) {
 		setErro(null);
 		try {
-			await lerResposta(await fetch(`${url}/avaliacoes${caminho}`, { method: metodo, headers: { "Content-Type": "application/json" }, body: JSON.stringify(corpo) }));
+			await lerResposta(await fetch(`${url}/avaliacoes${caminho}`, corpo === undefined ? { method: metodo } : { method: metodo, headers: { "Content-Type": "application/json" }, body: JSON.stringify(corpo) }));
 			carregar();
 		} catch (e) {
 			setErro((e as Error).message);
@@ -107,6 +107,8 @@ export function TurmaScreen({ codigo, turmaId }: { codigo: string; turmaId: stri
 		onData: (id, data) => void mudar(`/${encodeURIComponent(id)}`, "PUT", { data }),
 		onAdicionar: (entrada) => void mudar("", "POST", entrada),
 		onEscopo: (id, topicos) => void mudar(`/${encodeURIComponent(id)}`, "PUT", { topicos }),
+		onRenomear: (id, nome) => void mudar(`/${encodeURIComponent(id)}`, "PUT", { nome }),
+		onApagar: (id) => void mudar(`/${encodeURIComponent(id)}`, "DELETE"),
 	};
 
 	async function salvarEdicao() {

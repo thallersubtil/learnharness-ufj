@@ -7,6 +7,7 @@ import {
 	ehTopicoDeProva,
 	idTurmaSigaa,
 	montarDoSigaa,
+	ordinalDaProva,
 	progressoDaLeitura,
 	nomeDeDisciplina,
 	type Montagem,
@@ -138,6 +139,30 @@ describe("montar a partir do SIGAA", () => {
 		assert.ok(!voltou.materia.topicos.some((t) => t.id === "limites-2"));
 	});
 
+	it("a primeira vez, a prova do SIGAA se liga à prova à mão com o mesmo número (revisão final, #14)", () => {
+		const antes = primeira({ avaliacoes: [] });
+		antes.turma.avaliacoes.push({ id: "2a-prova", nome: "2ª prova", tipo: "prova-escrita", data: "2026-09-12", origemData: "manual", escopo: { topicos: [] } });
+		const m = proxima(antes, {});
+		assert.equal(m.turma.avaliacoes.length, 1, "não cria uma segunda prova");
+		const av = prova(m, "2a-prova");
+		assert.equal(av.sigaaId, "999");
+		assert.equal(av.origemData, "sigaa");
+		assert.equal(av.data, "2026-09-10");
+		assert.equal(av.nome, "2ª unidade");
+		assert.ok(m.avisos.includes('A "2ª prova" agora vem do SIGAA, como "2ª unidade".'), JSON.stringify(m.avisos));
+	});
+
+	it("com duas provas à mão do mesmo número, não liga nenhuma", () => {
+		const antes = primeira({ avaliacoes: [] });
+		antes.turma.avaliacoes.push(
+			{ id: "2a-prova", nome: "2ª prova", tipo: "prova-escrita", escopo: { topicos: [] } },
+			{ id: "prova-2", nome: "Prova 2", tipo: "prova-escrita", escopo: { topicos: [] } },
+		);
+		const m = proxima(antes, {});
+		assert.equal(m.turma.avaliacoes.length, 3);
+		assert.ok(m.turma.avaliacoes.some((a) => a.id === "sigaa-999"));
+	});
+
 	it("prova à mão continua como está", () => {
 		const antes = primeira();
 		antes.turma.avaliacoes.push({ id: "3a-prova", nome: "3ª prova", tipo: "prova-escrita", data: "2026-09-20", origemData: "manual", escopo: { topicos: [] } });
@@ -208,6 +233,16 @@ describe("ajudantes de título", () => {
 		assert.equal(ehTopicoDeProva("AV3 - teórica"), true);
 		assert.equal(ehTopicoDeProva("Correção da avaliação e derivadas implícitas."), false);
 		assert.equal(ehTopicoDeProva("Pilhas com ponteiros"), false);
+	});
+
+	it("ordinalDaProva", () => {
+		assert.equal(ordinalDaProva("2ª unidade"), 2);
+		assert.equal(ordinalDaProva("3ª prova"), 3);
+		assert.equal(ordinalDaProva("Avaliação 01"), 1);
+		assert.equal(ordinalDaProva("Prova 2 - prática"), 2);
+		assert.equal(ordinalDaProva("N3"), 3);
+		assert.equal(ordinalDaProva("AV2"), 2);
+		assert.equal(ordinalDaProva("Seminário"), null);
 	});
 
 	it("ehAulaCancelada e idTurmaSigaa", () => {

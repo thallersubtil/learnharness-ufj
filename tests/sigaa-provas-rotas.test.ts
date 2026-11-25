@@ -68,7 +68,7 @@ describe("rotas das provas", () => {
 	it("PUT sem data nem topicos dá 400", async () => {
 		const res = await put({});
 		assert.equal(res.status, 400);
-		assert.equal((await res.json()).error, "Informe a data ou os tópicos da prova.");
+		assert.equal((await res.json()).error, "Informe o nome, a data ou os tópicos da prova.");
 	});
 
 	it("prova desconhecida dá 404 'Prova não encontrada.'", async () => {
@@ -107,6 +107,18 @@ describe("rotas das provas", () => {
 		svc.adicionarProva("ICE0001", TURMA, { nome: "Prova cedo", data: "2026-08-30" });
 		const v = server.preparacaoView({ materia: "ICE0001", turma: TURMA, avaliacao: "prova-cedo" }, new Date(2026, 7, 1));
 		assert.deepEqual(v.avisos, ["Ainda não há tópicos de aula antes desta prova. Marque o conteúdo em “Conteúdo da prova”, na página da matéria."]);
+	});
+
+	it("PUT nome renomeia a prova à mão; DELETE apaga; a do SIGAA não (revisão final, #14)", async () => {
+		svc.adicionarProva("ICE0001", TURMA, { nome: "Prova extra", data: "2026-09-20" });
+		assert.equal((await put({ nome: "Prova extra (oral)" }, "prova-extra")).status, 200);
+		assert.equal(provaNoDisco("prova-extra")!.nome, "Prova extra (oral)");
+		const apagar = (id: string) => server.provaDeleteRoute("ICE0001", TURMA, id, svc);
+		assert.equal(apagar("prova-extra").status, 200);
+		assert.equal(provaNoDisco("prova-extra"), undefined);
+		const r = apagar("sigaa-999");
+		assert.equal(r.status, 400);
+		assert.equal((await r.json()).error, "Esta prova vem do SIGAA e não pode ser apagada aqui.");
 	});
 
 	it("POST cria a prova com o id do nome", async () => {

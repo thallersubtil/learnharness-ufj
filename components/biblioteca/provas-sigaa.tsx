@@ -20,10 +20,14 @@ export interface AcoesProvas {
 	onData(avaliacaoId: string, data: string | null): void;
 	onAdicionar(entrada: { nome: string; data?: string }): void;
 	onEscopo(avaliacaoId: string, topicos: string[]): void;
+	onRenomear(avaliacaoId: string, nome: string): void;
+	onApagar(avaliacaoId: string): void;
 }
 
-export function ProvasSigaa({ materia, turma, hoje, onData, onAdicionar, onEscopo }: { materia: Materia; turma: Turma; hoje: Date } & AcoesProvas) {
+export function ProvasSigaa({ materia, turma, hoje, onData, onAdicionar, onEscopo, onRenomear, onApagar }: { materia: Materia; turma: Turma; hoje: Date } & AcoesProvas) {
 	const [nome, setNome] = useState("");
+	const [renomeando, setRenomeando] = useState<{ id: string; nome: string } | null>(null);
+	const [apagando, setApagando] = useState<string | null>(null);
 	const [data, setData] = useState("");
 	const base = `/biblioteca/${encodeURIComponent(materia.codigo)}/${encodeURIComponent(turma.id)}`;
 	const provas = turma.avaliacoes.filter((a) => COM_PREPARACAO.has(a.tipo)).sort((a, b) => (a.data ?? "9999").localeCompare(b.data ?? "9999"));
@@ -44,12 +48,40 @@ export function ProvasSigaa({ materia, turma, hoje, onData, onAdicionar, onEscop
 				{provas.map((av) => (
 					<li key={av.id} className="rounded-md border px-3 py-2">
 						<div className="flex flex-wrap items-baseline gap-2 text-sm">
-							<span className="font-medium">{av.nome}</span>
+							{renomeando?.id === av.id ? (
+								<form
+									className="inline-flex items-center gap-1"
+									onSubmit={(e) => {
+										e.preventDefault();
+										if (renomeando.nome.trim()) onRenomear(av.id, renomeando.nome.trim());
+										setRenomeando(null);
+									}}
+								>
+									<Input className="h-7 w-44" aria-label="Novo nome da prova" autoFocus value={renomeando.nome} onChange={(e) => setRenomeando({ id: av.id, nome: e.target.value })} />
+									<Button type="submit" size="sm" variant="outline">Salvar</Button>
+									<Button type="button" size="sm" variant="ghost" onClick={() => setRenomeando(null)}>Cancelar</Button>
+								</form>
+							) : (
+								<span className="font-medium">{av.nome}</span>
+							)}
 							<DataEditavel data={av.data} origem={av.origemData} onSalvar={(d) => onData(av.id, d)} />
 							<span className="text-muted-foreground">{textoDias(av.data ? diasAte(av.data, hoje) : null)}</span>
 							<span className="flex-1" />
+							{!av.sigaaId && renomeando?.id !== av.id && (
+								<span data-prova-acoes={av.id} className="inline-flex gap-1">
+									<Button type="button" size="sm" variant="ghost" onClick={() => setRenomeando({ id: av.id, nome: av.nome })}>Renomear</Button>
+									<Button type="button" size="sm" variant="ghost" onClick={() => setApagando(av.id)}>Apagar</Button>
+								</span>
+							)}
 							<Link href={`${base}/${encodeURIComponent(av.id)}`} className="rounded-md border px-2 py-0.5 hover:bg-accent">Preparar</Link>
 						</div>
+						{apagando === av.id && (
+							<div role="alertdialog" aria-label="Apagar prova" className="mt-1 flex flex-wrap items-center gap-2 rounded-md border border-destructive/40 px-3 py-1.5 text-sm">
+								<span className="flex-1">Apagar a prova “{av.nome}”? As sessões já feitas continuam.</span>
+								<Button type="button" size="sm" variant="destructive" onClick={() => { setApagando(null); onApagar(av.id); }}>Apagar</Button>
+								<Button type="button" size="sm" variant="ghost" onClick={() => setApagando(null)}>Cancelar</Button>
+							</div>
+						)}
 						<details className="mt-1">
 							<summary className="cursor-pointer text-xs text-muted-foreground">Conteúdo da prova ({av.escopo.topicos.length} tópico(s))</summary>
 							<div className="mt-2 grid gap-1 sm:grid-cols-2">

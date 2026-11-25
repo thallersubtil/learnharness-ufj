@@ -40,6 +40,30 @@ export function adicionarProva(turma: Turma, entrada: { nome: string; data?: str
 	return recalcularTurma({ ...turma, avaliacoes: [...turma.avaliacoes, prova] });
 }
 
+/** Renomeia uma prova criada à mão. A do SIGAA tem o nome que vem de lá. */
+export function renomearProva(turma: Turma, avaliacaoId: string, nome: string): Turma {
+	const av = turma.avaliacoes.find((a) => a.id === avaliacaoId);
+	if (!av) throw new BibliotecaNaoEncontradaError("Prova não encontrada.");
+	if (av.sigaaId) throw new BibliotecaEntradaError("O nome desta prova vem do SIGAA.");
+	const novo = nome.trim();
+	if (!novo) throw new BibliotecaEntradaError("Dê um nome à prova.");
+	return { ...turma, avaliacoes: turma.avaliacoes.map((a) => (a.id === avaliacaoId ? { ...a, nome: novo } : a)) };
+}
+
+/** Apaga uma prova criada à mão (e solta a aula de prova ligada a ela). A do SIGAA
+ *  não: a próxima sincronização a traria de volta. */
+export function removerProva(turma: Turma, avaliacaoId: string): Turma {
+	const av = turma.avaliacoes.find((a) => a.id === avaliacaoId);
+	if (!av) throw new BibliotecaNaoEncontradaError("Prova não encontrada.");
+	if (av.sigaaId) throw new BibliotecaEntradaError("Esta prova vem do SIGAA e não pode ser apagada aqui.");
+	const aulas = turma.aulas.map((a) => {
+		if (a.avaliacaoId !== avaliacaoId) return a;
+		const { avaliacaoId: _x, ...resto } = a;
+		return resto;
+	});
+	return recalcularTurma({ ...turma, aulas, avaliacoes: turma.avaliacoes.filter((a) => a.id !== avaliacaoId) });
+}
+
 /** Grava o que o aluno quer na prova como diferença do escopo calculado. */
 export function definirEscopoProva(turma: Turma, avaliacaoId: string, topicos: string[]): Turma {
 	if (!turma.avaliacoes.some((a) => a.id === avaliacaoId)) throw new BibliotecaNaoEncontradaError("Prova não encontrada.");

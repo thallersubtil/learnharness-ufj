@@ -37,7 +37,7 @@ function dadosSigaa() {
 	return { materia: m.materia, turma: m.turma, referencias: m.referencias, arquivos: ["regra.pdf"] };
 }
 
-const acoes = { onData: noop, onAdicionar: noop, onEscopo: noop };
+const acoes = { onData: noop, onAdicionar: noop, onEscopo: noop, onRenomear: noop, onApagar: noop };
 
 describe("DataEditavel", () => {
 	it("selo e aviso da data do SIGAA", () => {
@@ -93,6 +93,16 @@ describe("turma do SIGAA", () => {
 		assert.match(html, /Conteúdo da prova/);
 		assert.match(html, /<input[^>]*data-escopo="sigaa-999:regra-da-cadeia"[^>]*checked=""/);
 		assert.doesNotMatch(html, /<input[^>]*data-escopo="sigaa-999:limites"[^>]*checked=""/);
+	});
+
+	it("prova à mão tem Renomear e Apagar; a do SIGAA não (revisão final, #14)", () => {
+		const d = dadosSigaa();
+		d.turma.avaliacoes.push({ id: "prova-extra", nome: "Prova extra", tipo: "prova-escrita", origemData: "manual", data: "2026-09-20", escopo: { topicos: [] } });
+		const html = renderToStaticMarkup(<TurmaView dados={d} hoje={new Date(2026, 8, 5)} onEditar={noop} acoes={acoes} />);
+		assert.match(html, /data-prova-acoes="prova-extra"/);
+		assert.doesNotMatch(html, /data-prova-acoes="sigaa-999"/);
+		assert.match(html, />Renomear</);
+		assert.match(html, />Apagar</);
 	});
 
 	it("turma de plano continua com Editar plano", () => {

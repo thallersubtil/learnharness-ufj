@@ -200,20 +200,32 @@ export async function preparacaoPutRoute(request: Request): Promise<Response> {
 
 // ─── provas: data, nova prova e conteúdo (spec SIGAA §7.5–7.6) ───────────────
 
-/** PUT .../avaliacoes/[avaliacao] — `{ data?: string | null; topicos?: string[] }` (ao menos um). */
+/** PUT .../avaliacoes/[avaliacao] — `{ nome?: string; data?: string | null; topicos?: string[] }` (ao menos um). */
 export async function provaPutRoute(request: Request, codigo: string, turmaId: string, avaliacaoId: string, svc: BibliotecaService = bibliotecaService): Promise<Response> {
 	const body = await lerJson(request);
 	if (body instanceof Response) return body;
-	const b = (body && typeof body === "object" ? body : {}) as { data?: unknown; topicos?: unknown };
+	const b = (body && typeof body === "object" ? body : {}) as { nome?: unknown; data?: unknown; topicos?: unknown };
+	const temNome = "nome" in b;
 	const temData = "data" in b;
 	const temTopicos = "topicos" in b;
-	if (!temData && !temTopicos) return Response.json({ error: "Informe a data ou os tópicos da prova." }, { status: 400 });
+	if (!temNome && !temData && !temTopicos) return Response.json({ error: "Informe o nome, a data ou os tópicos da prova." }, { status: 400 });
+	if (temNome && typeof b.nome !== "string") return Response.json({ error: "Dê um nome à prova." }, { status: 400 });
 	if (temData && b.data !== null && typeof b.data !== "string") return Response.json({ error: "Informe a data no formato AAAA-MM-DD." }, { status: 400 });
 	if (temTopicos && (!Array.isArray(b.topicos) || b.topicos.some((t) => typeof t !== "string"))) return Response.json({ error: "Os tópicos precisam ser uma lista de ids." }, { status: 400 });
 	try {
-		let turma = temData ? svc.definirData(codigo, turmaId, avaliacaoId, b.data as string | null) : undefined;
+		let turma = temNome ? svc.renomearProva(codigo, turmaId, avaliacaoId, b.nome as string) : undefined;
+		if (temData) turma = svc.definirData(codigo, turmaId, avaliacaoId, b.data as string | null);
 		if (temTopicos) turma = svc.definirEscopo(codigo, turmaId, avaliacaoId, b.topicos as string[]);
 		return Response.json(turma);
+	} catch (err) {
+		return respostaDeErro(err);
+	}
+}
+
+/** DELETE .../avaliacoes/[avaliacao] — apaga uma prova criada à mão. */
+export function provaDeleteRoute(codigo: string, turmaId: string, avaliacaoId: string, svc: BibliotecaService = bibliotecaService): Response {
+	try {
+		return Response.json(svc.removerProva(codigo, turmaId, avaliacaoId));
 	} catch (err) {
 		return respostaDeErro(err);
 	}

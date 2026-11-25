@@ -17,7 +17,7 @@ import {
 	type Turma,
 } from "../core/biblioteca.ts";
 import { arquivarRemovidos, topicosReferenciados } from "../core/biblioteca-escopo.ts";
-import { adicionarProva as adicionarProvaNaTurma, definirDataProva, definirEscopoProva } from "../core/provas.ts";
+import { adicionarProva as adicionarProvaNaTurma, definirDataProva, definirEscopoProva, removerProva, renomearProva } from "../core/provas.ts";
 import type { BibliotecaStore } from "../core/ports.ts";
 import { MAX_IMPORT_BYTES } from "../../lib/notes-import-limits.ts";
 import { stores } from "./stores.ts";
@@ -213,6 +213,22 @@ export function createBibliotecaService(deps: BibliotecaServiceDeps) {
 		adicionarProva(codigo: string, turmaId: string, entrada: { nome: string; data?: string }): Turma {
 			const { turma } = turmaExistente(codigo, turmaId);
 			const nova = adicionarProvaNaTurma(turma, entrada);
+			biblioteca.writeTurma(codigo, nova);
+			return nova;
+		},
+
+		/** Renomeia uma prova criada à mão. */
+		renomearProva(codigo: string, turmaId: string, avaliacaoId: string, nome: string): Turma {
+			const { turma } = turmaExistente(codigo, turmaId);
+			const nova = renomearProva(turma, avaliacaoId, nome);
+			biblioteca.writeTurma(codigo, nova);
+			return nova;
+		},
+
+		/** Apaga uma prova criada à mão. */
+		removerProva(codigo: string, turmaId: string, avaliacaoId: string): Turma {
+			const { turma } = turmaExistente(codigo, turmaId);
+			const nova = removerProva(turma, avaliacaoId);
 			biblioteca.writeTurma(codigo, nova);
 			return nova;
 		},

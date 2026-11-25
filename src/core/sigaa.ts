@@ -137,6 +137,16 @@ export function ehTopicoDeProva(titulo: string): boolean {
 	return /^(\d+\s*[ao]?\s*)?(prova|avaliacao|exame)\b/.test(n) || /^(n|av)[1-4]\b/.test(n);
 }
 
+/** O número de uma prova pelo nome: "2ª unidade" → 2, "Avaliação 01" → 1, "N3" → 3; sem número, null. */
+export function ordinalDaProva(texto: string): number | null {
+	const n = normalizarTitulo(texto);
+	const m =
+		/^(\d+)\s*[ao]?\s*(prova|unidade|avaliacao|chamada|etapa|nota)\b/.exec(n)?.[1] ??
+		/\b(?:prova|avaliacao|unidade|etapa)\s*0*(\d+)\b/.exec(n)?.[1] ??
+		/^(?:n|av|p)\s*0*(\d+)\b/.exec(n)?.[1];
+	return m ? Number(m) : null;
+}
+
 /** "Não Haverá Aula". */
 export function ehAulaCancelada(titulo: string): boolean {
 	return normalizarTitulo(titulo).startsWith("nao havera aula");
@@ -236,6 +246,19 @@ function mesclarAvaliacoes(lida: SigaaTurmaLida, anteriores: readonly Avaliacao[
 		if (i >= 0) {
 			const { hora: _h, ...resto } = out[i]!;
 			out[i] = { ...resto, nome: sa.descricao.trim() || resto.nome, data: sa.data, origemData: "sigaa", sigaaId: sa.sigaaId, ...(sa.hora && HORA_RE.test(sa.hora) ? { hora: sa.hora } : {}) };
+			continue;
+		}
+		// A primeira vez: uma única prova sem SIGAA com o mesmo número ("3ª prova" à mão ↔
+		// "3ª unidade" do SIGAA) passa a ser esta. Com duas ou mais, nenhuma (seria palpite).
+		const numero = ordinalDaProva(sa.descricao);
+		const candidatas = numero === null ? [] : out.flatMap((a, j) => (!a.sigaaId && (a.tipo === "prova-escrita" || a.tipo === "prova-pratica") && ordinalDaProva(a.nome) === numero ? [j] : []));
+		if (candidatas.length === 1) {
+			const j = candidatas[0]!;
+			const { hora: _h, ...resto } = out[j]!;
+			const nome = sa.descricao.trim() || resto.nome;
+			avisos.push(`A "${resto.nome}" agora vem do SIGAA, como "${nome}".`);
+			if (resto.data && resto.data !== sa.data) avisos.push(`O SIGAA mudou a ${nome} de ${formatarDataCurta(resto.data)} para ${formatarDataCurta(sa.data)}.`);
+			out[j] = { ...resto, nome, data: sa.data, origemData: "sigaa", sigaaId: sa.sigaaId, ...(sa.hora && HORA_RE.test(sa.hora) ? { hora: sa.hora } : {}) };
 			continue;
 		}
 		out.push({
