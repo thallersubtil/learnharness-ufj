@@ -118,6 +118,30 @@ export interface Turma {
 	revisadoEm: string;
 	/** A turma é montada pelo SIGAA (spec SIGAA §7.4). */
 	sigaa?: { idTurma: string; sufixo?: string; sincronizadoEm: string };
+	/** Tarefas e notícias lidas do SIGAA (spec chat+SIGAA §5.1). */
+	tarefas?: Tarefa[];
+	noticias?: Noticia[];
+}
+
+export interface Tarefa {
+	titulo: string;
+	/** AAAA-MM-DD */
+	inicio?: string;
+	/** AAAA-MM-DD */
+	fim?: string;
+	/** HH:MM do prazo */
+	hora?: string;
+	instrucoes: string;
+	temArquivo: boolean;
+}
+
+export interface Noticia {
+	sigaaId: string;
+	titulo: string;
+	/** AAAA-MM-DD */
+	data: string;
+	/** O texto completo, lido uma vez quando a notícia é nova. */
+	texto?: string;
 }
 
 export interface Referencias {
@@ -419,6 +443,14 @@ export function parseTurma(raw: unknown): Turma {
 	if (recuperacao !== undefined) t.recuperacao = recuperacao;
 	const metodologia = optStr(raw, "metodologia", onde);
 	if (metodologia !== undefined) t.metodologia = metodologia;
+	if (raw.tarefas !== undefined) {
+		if (!Array.isArray(raw.tarefas)) return fail(onde, "a lista de tarefas precisa ser uma lista");
+		t.tarefas = raw.tarefas.map((x, i) => parseTarefa(x, `${onde} (tarefa ${i + 1})`));
+	}
+	if (raw.noticias !== undefined) {
+		if (!Array.isArray(raw.noticias)) return fail(onde, "a lista de notícias precisa ser uma lista");
+		t.noticias = raw.noticias.map((x, i) => parseNoticia(x, `${onde} (notícia ${i + 1})`));
+	}
 	if (raw.sigaa !== undefined) {
 		const s = raw.sigaa;
 		if (!isObj(s)) return fail(onde, "dados do SIGAA inválidos");
@@ -428,6 +460,32 @@ export function parseTurma(raw: unknown): Turma {
 		t.sigaa = sigaa;
 	}
 	return t;
+}
+
+function parseTarefa(raw: unknown, onde: string): Tarefa {
+	if (!isObj(raw)) return fail(onde, "tarefa inválida");
+	const t: Tarefa = { titulo: str(raw, "titulo", onde), instrucoes: str(raw, "instrucoes", onde), temArquivo: raw.temArquivo === true };
+	if (raw.temArquivo !== undefined && typeof raw.temArquivo !== "boolean") fail(onde, `o campo "temArquivo" precisa ser verdadeiro ou falso`);
+	const inicio = optData(raw, "inicio", onde);
+	if (inicio !== undefined) t.inicio = inicio;
+	const fim = optData(raw, "fim", onde);
+	if (fim !== undefined) t.fim = fim;
+	const hora = optStr(raw, "hora", onde);
+	if (hora !== undefined) {
+		if (!HORA_RE.test(hora)) fail(onde, `o campo "hora" precisa estar no formato HH:MM`);
+		t.hora = hora;
+	}
+	return t;
+}
+
+function parseNoticia(raw: unknown, onde: string): Noticia {
+	if (!isObj(raw)) return fail(onde, "notícia inválida");
+	const data = str(raw, "data", onde);
+	if (!DATA_RE.test(data)) fail(onde, `o campo "data" precisa estar no formato AAAA-MM-DD`);
+	const n: Noticia = { sigaaId: str(raw, "sigaaId", onde), titulo: str(raw, "titulo", onde), data };
+	const texto = optStr(raw, "texto", onde);
+	if (texto !== undefined) n.texto = texto;
+	return n;
 }
 
 export function parseReferencias(raw: unknown): Referencias {
