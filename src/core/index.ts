@@ -24,6 +24,7 @@ export * from "./biblioteca.ts";
 export * from "./biblioteca-escopo.ts";
 export * from "./provas.ts";
 export * from "./sigaa.ts";
+export * from "./resumo-ufj.ts";
 export * from "./ufj-context.ts";
 export * from "./preparacao.ts";
 export * from "./source-selection.ts";
