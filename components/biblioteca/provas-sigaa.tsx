@@ -7,7 +7,7 @@
  */
 
 import Link from "next/link";
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { TIPOS_COM_ESCOPO, diasAte, type Materia, type Turma } from "@/src/core";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +28,23 @@ export function ProvasSigaa({ materia, turma, hoje, onData, onAdicionar, onEscop
 	const [nome, setNome] = useState("");
 	const [renomeando, setRenomeando] = useState<{ id: string; nome: string } | null>(null);
 	const [apagando, setApagando] = useState<string | null>(null);
+	// As escolhas de conteúdo que o aluno acabou de fazer, antes de a tela recarregar:
+	// cada clique parte da escolha anterior, não da lista antiga (cliques rápidos).
+	const escolhas = useRef<Record<string, string[]>>({});
+	const [, redesenhar] = useState(0);
+	const chave = turma.avaliacoes.map((a) => `${a.id}:${a.escopo.topicos.join(",")}`).join("|");
+	useEffect(() => {
+		escolhas.current = {};
+		redesenhar((n) => n + 1);
+	}, [chave]);
+	const escopoDe = (id: string, doServidor: string[]) => escolhas.current[id] ?? doServidor;
+	function alternar(id: string, doServidor: string[], topico: string, marcado: boolean) {
+		const atual = escopoDe(id, doServidor);
+		const novo = marcado ? [...atual.filter((x) => x !== topico), topico] : atual.filter((x) => x !== topico);
+		escolhas.current = { ...escolhas.current, [id]: novo };
+		redesenhar((n) => n + 1);
+		onEscopo(id, novo);
+	}
 	const [data, setData] = useState("");
 	const base = `/biblioteca/${encodeURIComponent(materia.codigo)}/${encodeURIComponent(turma.id)}`;
 	const provas = turma.avaliacoes.filter((a) => COM_PREPARACAO.has(a.tipo)).sort((a, b) => (a.data ?? "9999").localeCompare(b.data ?? "9999"));
@@ -83,17 +100,17 @@ export function ProvasSigaa({ materia, turma, hoje, onData, onAdicionar, onEscop
 							</div>
 						)}
 						<details className="mt-1">
-							<summary className="cursor-pointer text-xs text-muted-foreground">Conteúdo da prova ({av.escopo.topicos.length} tópico(s))</summary>
+							<summary className="cursor-pointer text-xs text-muted-foreground">Conteúdo da prova ({escopoDe(av.id, av.escopo.topicos).length} tópico(s))</summary>
 							<div className="mt-2 grid gap-1 sm:grid-cols-2">
 								{topicos.map((t) => {
-									const marcado = av.escopo.topicos.includes(t.id);
+									const marcado = escopoDe(av.id, av.escopo.topicos).includes(t.id);
 									return (
 										<label key={t.id} className="flex items-center gap-2 text-sm">
 											<input
 												type="checkbox"
 												data-escopo={`${av.id}:${t.id}`}
 												checked={marcado}
-												onChange={(e) => onEscopo(av.id, e.target.checked ? [...av.escopo.topicos, t.id] : av.escopo.topicos.filter((x) => x !== t.id))}
+												onChange={(e) => alternar(av.id, av.escopo.topicos, t.id, e.target.checked)}
 											/>
 											{t.titulo}
 										</label>

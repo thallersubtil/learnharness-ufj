@@ -6,11 +6,11 @@
  */
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { TIPOS_COM_ESCOPO, diasAte, formatarData, type Materia, type Referencias, type Turma } from "@/src/core";
 import { useServerEvent } from "@/components/server-events";
 import { Button } from "@/components/ui/button";
-import { Aviso, BibliotecaPagina, Secao, VoltarParaMaterias, lerResposta, textoDias } from "./comum";
+import { Aviso, BibliotecaPagina, Secao, VoltarParaMaterias, criarFila, lerResposta, textoDias } from "./comum";
 import { MateriaisForm } from "./materiais-form";
 import { PlanoForm } from "./plano-form";
 import { ProvasSigaa, type AcoesProvas } from "./provas-sigaa";
@@ -94,7 +94,12 @@ export function TurmaScreen({ codigo, turmaId }: { codigo: string; turmaId: stri
 	useEffect(carregar, [carregar]);
 	useServerEvent("biblioteca-changed", carregar);
 
-	async function mudar(caminho: string, metodo: "PUT" | "POST" | "DELETE", corpo?: unknown) {
+	// As mudanças vão uma depois da outra: dois salvamentos seguidos nunca chegam fora de ordem.
+	const fila = useRef(criarFila());
+	function mudar(caminho: string, metodo: "PUT" | "POST" | "DELETE", corpo?: unknown) {
+		return fila.current(() => executar(caminho, metodo, corpo));
+	}
+	async function executar(caminho: string, metodo: "PUT" | "POST" | "DELETE", corpo?: unknown) {
 		setErro(null);
 		try {
 			await lerResposta(await fetch(`${url}/avaliacoes${caminho}`, corpo === undefined ? { method: metodo } : { method: metodo, headers: { "Content-Type": "application/json" }, body: JSON.stringify(corpo) }));

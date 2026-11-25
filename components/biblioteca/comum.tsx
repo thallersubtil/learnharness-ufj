@@ -59,6 +59,17 @@ export function Secao({ titulo, children, acoes }: { titulo: string; children: R
 	);
 }
 
+/** Uma fila de mudanças: cada uma só começa quando a anterior termina (com sucesso ou erro),
+ *  para que dois salvamentos seguidos nunca cheguem fora de ordem ao servidor. */
+export function criarFila() {
+	let ultima: Promise<unknown> = Promise.resolve();
+	return function enfileirar<T>(tarefa: () => Promise<T>): Promise<T> {
+		const proxima = ultima.then(tarefa, tarefa);
+		ultima = proxima.catch(() => {});
+		return proxima;
+	};
+}
+
 /** Lê a resposta de uma rota da biblioteca; erro vira Error com a mensagem da rota. */
 export async function lerResposta<T>(res: Response): Promise<T> {
 	const body = (await res.json().catch(() => ({}))) as { error?: unknown };
