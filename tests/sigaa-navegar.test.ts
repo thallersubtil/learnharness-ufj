@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { after, describe, it } from "node:test";
 import { SigaaSessao } from "../src/server/sigaa/http.ts";
 import { entrar } from "../src/server/sigaa/login.ts";
-import { ipynbParaTexto, lerSigaa, podeLerSecao, type ArquivoBaixado } from "../src/server/sigaa/navegar.ts";
+import { ipynbParaTexto, lerSigaa, nomeDoArquivo, podeLerSecao, type ArquivoBaixado } from "../src/server/sigaa/navegar.ts";
 import type { SigaaTurmaLida } from "../src/core/index.ts";
 import { iniciarSigaaFalso, type OpcoesSigaaFalso, type SigaaFalso } from "./helpers/sigaa-falso.ts";
 
@@ -130,6 +130,14 @@ describe("navegar pelo SIGAA", () => {
 		const leitura = await lerSigaa(sessao, portal, { jaBaixado: () => false, aoLerTurma: () => {}, tamanhoMaximo: 26 * 1024 * 1024 });
 		assert.equal(leitura.turmasLidas, 0);
 		assert.match(leitura.falhas[0]!.erro, /redirecionamento para outro endereço \(http:\/\/127\.0\.0\.1:\d+\)/);
+	});
+
+	it("nome comprido com acento é cortado por bytes e mantém a extensão (revisão final, #11)", () => {
+		const longo = `${"Introdução à Computação ".repeat(20)}.pdf`;
+		const nome = nomeDoArquivo(`attachment; filename="${Buffer.from(longo, "utf8").toString("latin1")}"`, "reserva");
+		assert.ok(Buffer.byteLength(nome, "utf8") <= 200, String(Buffer.byteLength(nome, "utf8")));
+		assert.ok(nome.endsWith(".pdf"), nome);
+		assert.ok(nome.startsWith("Introdução à Computação"), nome);
 	});
 
 	it("ipynb vira texto com o código e sem as saídas", async () => {

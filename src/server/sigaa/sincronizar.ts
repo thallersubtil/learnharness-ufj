@@ -41,6 +41,8 @@ export interface SincronizacaoDeps {
 	/** Onde fica a sincronização em andamento. Em produção, um só para o processo
 	 *  inteiro (cada rota do Next pode ter sua cópia deste módulo). */
 	compartilhado?: EmAndamento;
+	/** Maior arquivo que se baixa (padrão: o limite das importações, 26 MiB). */
+	tamanhoMaximo?: number;
 }
 
 /** A sincronização em andamento e o seu progresso (só na memória). */
@@ -104,7 +106,14 @@ export function createSincronizacao(deps: SincronizacaoDeps) {
 		const referencias = biblioteca.readReferencias(lida.codigo, turmaId);
 		const arquivos = [...referencias.arquivos];
 		for (const b of baixados) {
-			const r = biblioteca.addReferenciaFile(lida.codigo, turmaId, b.nome, b.bytes);
+			// Um arquivo que não pôde ser gravado vira aviso; os outros e a turma seguem.
+			let r: ReturnType<BibliotecaStore["addReferenciaFile"]>;
+			try {
+				r = biblioteca.addReferenciaFile(lida.codigo, turmaId, b.nome, b.bytes);
+			} catch (err) {
+				avisos.push(`Não consegui guardar "${b.nome}" de ${nomeDeDisciplina(lida.nome)}: ${err instanceof Error ? err.message : String(err)}`);
+				continue;
+			}
 			const i = arquivos.findIndex((a) => a.arquivo === r.arquivo);
 			if (i < 0) arquivos.push({ arquivo: r.arquivo, sha256: r.sha256, sigaaId: b.sigaaId, titulo: b.nome, topicos: [] });
 			// O mesmo conteúdo já guardado sem o id do SIGAA (ex.: "Salvar materiais" antigo): o id volta.
@@ -124,7 +133,7 @@ export function createSincronizacao(deps: SincronizacaoDeps) {
 			const leitura = await lerSigaa(sessao, portal, {
 				jaBaixado: (l, sigaaId) => deps.biblioteca.readReferencias(l.codigo, idTurmaSigaa(l.semestre, l.sufixo)).arquivos.some((a) => a.sigaaId === sigaaId),
 				aoLerTurma: (lida, baixados) => aoLerTurma(lida, baixados, avisos),
-				tamanhoMaximo: MAX_IMPORT_BODY_BYTES,
+				tamanhoMaximo: deps.tamanhoMaximo ?? MAX_IMPORT_BODY_BYTES,
 				progresso: (p) => {
 					em.progresso = progressoDaLeitura(p);
 					deps.emitir(true);

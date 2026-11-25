@@ -34,12 +34,13 @@ beforeEach(() => {
 const TURMA = "2026-2-turma-ta";
 let emitidos = 0;
 
-async function montar(opcoes: OpcoesSigaaFalso = {}, compartilhado?: { andamento: Promise<void> | null }) {
+async function montar(opcoes: OpcoesSigaaFalso = {}, compartilhado?: { andamento: Promise<void> | null }, extra: { biblioteca?: typeof bibliotecaStore; tamanhoMaximo?: number } = {}) {
 	const f = await iniciarSigaaFalso(opcoes);
 	abertos.push(f);
 	const s = createSincronizacao({
 		...(compartilhado ? { compartilhado } : {}),
-		biblioteca: bibliotecaStore,
+		...(extra.tamanhoMaximo !== undefined ? { tamanhoMaximo: extra.tamanhoMaximo } : {}),
+		biblioteca: extra.biblioteca ?? bibliotecaStore,
 		sigaa: sigaaStore,
 		cifrar: async (t) => `teste:${t}`,
 		decifrar: async (c) => c.replace(/^teste:/, ""),
@@ -270,6 +271,20 @@ describe("sincronização", () => {
 		assert.deepEqual(e.avisos, []);
 		assert.equal(e.erro, undefined);
 		await s.emAndamento();
+	});
+
+	it("um arquivo que falha ao gravar vira aviso e não derruba a turma (revisão final, #11)", async () => {
+		const falha = { ...bibliotecaStore, addReferenciaFile: (c: string, t: string, nome: string, bytes: Uint8Array) => {
+			if (nome.startsWith("Ficha")) throw new Error("disco cheio");
+			return bibliotecaStore.addReferenciaFile(c, t, nome, bytes);
+		} };
+		const { s } = await montar({}, undefined, { biblioteca: falha });
+		await s.conectar("aluno.teste", "segredo");
+		await s.emAndamento();
+		assert.equal(s.estado().situacao, "ocioso");
+		assert.ok(s.estado().avisos.includes('Não consegui guardar "Ficha de avaliação.docx" de Cálculo Teste: disco cheio'), JSON.stringify(s.estado().avisos));
+		assert.equal(bibliotecaStore.readReferencias("ICE0001", TURMA).arquivos.length, 3);
+		assert.ok(bibliotecaStore.readTurma("ICE0001", TURMA));
 	});
 
 	it("senha guardada recusada: senha-recusada e não tenta de novo", async () => {

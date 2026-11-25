@@ -80,7 +80,17 @@ export function nomeDoArquivo(disposicao: string, reserva: string): string {
 		if (nome && /[ÃÂ][\u0080-¿]/.test(nome)) nome = Buffer.from(nome, "latin1").toString("utf8");
 	}
 	const limpo = (nome ?? reserva).replace(/[/\\\0]/g, "_").replace(/^[.\s]+/, "").trim();
-	return (limpo || "arquivo").slice(0, 180).trim();
+	return cortarPorBytes(limpo || "arquivo", 200);
+}
+
+/** Corta o nome para caber em `max` bytes UTF-8 (o disco conta bytes, não letras), mantendo a extensão. */
+function cortarPorBytes(nome: string, max: number): string {
+	if (Buffer.byteLength(nome, "utf8") <= max) return nome;
+	const i = nome.lastIndexOf(".");
+	const ext = i > 0 && nome.length - i <= 12 ? nome.slice(i) : "";
+	const letras = Array.from(ext ? nome.slice(0, i) : nome);
+	while (letras.length > 0 && Buffer.byteLength(letras.join("") + ext, "utf8") > max) letras.pop();
+	return `${letras.join("").trim()}${ext}`;
 }
 
 const ehArquivo = (p: Pagina) => /filename/i.test(p.headers.get("content-disposition") ?? "");
