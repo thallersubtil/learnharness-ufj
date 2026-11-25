@@ -8,7 +8,6 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { UploadIcon } from "lucide-react";
 import { TIPOS_COM_ESCOPO, diasAte, formatarData, type EstadoSigaa, type Materia, type Turma } from "@/src/core";
 import { useServerEvent } from "@/components/server-events";
 import { CartaoSigaa, useEstadoSigaa } from "@/components/sigaa/conta-ufj";
@@ -26,23 +25,13 @@ export function BibliotecaHome({ materias, problemas, hoje, sigaa, onSincronizar
 	return (
 		<div className="space-y-6">
 			{sigaa && <CartaoSigaa estado={sigaa} onSincronizar={onSincronizar} />}
-			<div className="flex items-center gap-3">
-				<p className="flex-1 text-sm text-muted-foreground">As matérias do semestre, as provas e a preparação de cada uma.</p>
-				<Link href="/biblioteca/importar" className="inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm hover:bg-accent">
-					<UploadIcon className="size-4" />
-					Importar plano de ensino
-				</Link>
-			</div>
 			{problemas.map((p) => <Aviso key={p}>{p}</Aviso>)}
 			{materias.length === 0 ? (
 				<Aviso>Nenhuma matéria ainda. Conecte sua conta UFJ ou importe um plano de ensino.</Aviso>
 			) : (
 				materias.map(({ materia, turmas }) => (
 					<div key={materia.codigo} className="rounded-lg border px-4 py-3">
-						<div className="flex items-baseline gap-2">
-							<h2 className="font-title text-xl">{materia.nome}</h2>
-							<span className="text-xs text-muted-foreground">{materia.codigo}</span>
-						</div>
+						<h2 className="font-title text-xl">{materia.nome}</h2>
 						{turmas.map((turma) => {
 							const provas = turma.avaliacoes.filter((a) => COM_PREPARACAO.has(a.tipo));
 							const base = `/biblioteca/${encodeURIComponent(materia.codigo)}/${encodeURIComponent(turma.id)}`;
@@ -72,6 +61,7 @@ export function BibliotecaHome({ materias, problemas, hoje, sigaa, onSincronizar
 					</div>
 				))
 			)}
+			<p className="text-xs text-muted-foreground"><Link href="/biblioteca/importar" className="hover:underline">Importar plano de ensino</Link></p>
 		</div>
 	);
 }

@@ -42,8 +42,18 @@ function BarraDeProgresso({ estado }: { estado: EstadoSigaa }) {
 	);
 }
 
+const MAX_AVISOS = 5;
+
 function Avisos({ avisos }: { avisos: string[] }) {
-	return avisos.length ? <div className="space-y-2">{avisos.map((a) => <Aviso key={a}>{a}</Aviso>)}</div> : null;
+	if (!avisos.length) return null;
+	const mostrados = avisos.slice(0, MAX_AVISOS);
+	const resto = avisos.length - mostrados.length;
+	return (
+		<div className="space-y-2">
+			{mostrados.map((a) => <Aviso key={a}>{a}</Aviso>)}
+			{resto > 0 && <p className="text-xs text-muted-foreground">e mais {resto}</p>}
+		</div>
+	);
 }
 
 export function ContaUfj({ estado, ocupado, erro, onConectar, onSincronizar, onSair }: {

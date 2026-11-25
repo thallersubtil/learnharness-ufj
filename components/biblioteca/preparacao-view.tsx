@@ -93,8 +93,8 @@ export function PreparacaoTela({ view, onAprender, onPraticar, onHoras, onData, 
 								<Button type="button" size="sm" variant="outline" disabled={ocupado} onClick={() => onPraticar(t)}>Praticar</Button>
 							</div>
 							<p className="mt-1 text-xs text-muted-foreground">
-								{t.aulas.map((a) => `Aula ${a.rotulo}${a.data ? ` (${formatarDataCurta(a.data)})` : ""}`).join(" · ")}
-								{t.referencias > 0 && ` · ${t.referencias} material(is)`}
+								{t.aulas.map((a) => (a.data ? formatarDataCurta(a.data) : `Aula ${a.rotulo}`)).join(", ")}
+								{t.referencias > 0 && ` · ${t.referencias} ${t.referencias === 1 ? "material" : "materiais"}`}
 							</p>
 							{t.sessoes.length > 0 && (
 								<p className="mt-1 flex flex-wrap gap-x-3 text-xs">

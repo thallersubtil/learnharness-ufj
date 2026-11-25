@@ -39,8 +39,9 @@ export function TurmaView({ dados, hoje, onEditar, acoes, materiais }: { dados: 
 	if (turma.sigaa) {
 		return (
 			<div className="space-y-2">
-				<p className="text-sm text-muted-foreground">
-					{materia.codigo} · {turma.semestre}{turma.docente.nome ? ` · ${turma.docente.nome}` : ""} · do SIGAA
+				<p className="flex items-baseline gap-2 text-sm text-muted-foreground">
+					<span className="flex-1">{turma.docente.nome ? `${turma.docente.nome} · ` : ""}{turma.semestre}</span>
+					<span className="text-xs">{materia.codigo}</span>
 				</p>
 				<Secao titulo="Provas">
 					<ProvasSigaa materia={materia} turma={turma} hoje={hoje} {...(acoes ?? SEM_ACOES)} />
