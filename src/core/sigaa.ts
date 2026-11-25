@@ -15,7 +15,9 @@ import {
 	type Aula,
 	type Avaliacao,
 	type Materia,
+	type Noticia,
 	type Referencias,
+	type Tarefa,
 	type Topico,
 	type Turma,
 } from "./biblioteca.ts";
@@ -63,6 +65,9 @@ export interface SigaaTurmaLida {
 	topicos: SigaaTopicoDeAula[];
 	avaliacoes: SigaaAvaliacao[];
 	arquivos: SigaaArquivo[];
+	tarefas: Tarefa[];
+	/** `texto` só nas notícias abertas nesta leitura (as novas). */
+	noticias: Noticia[];
 }
 
 export interface Montagem {
@@ -79,7 +84,7 @@ export interface ProgressoLeitura {
 	turma: string;
 	turmaAtual: number;
 	totalTurmas: number;
-	etapa: "turma" | "arquivos";
+	etapa: "turma" | "tarefas" | "noticias" | "arquivos";
 	arquivoAtual?: number;
 	totalArquivos?: number;
 }
@@ -93,7 +98,12 @@ export function progressoDaLeitura(p: ProgressoLeitura): { fracao: number; texto
 	const dentro = porArquivos ? 0.1 + (0.9 * (p.arquivoAtual! - 1)) / p.totalArquivos! : 0.1;
 	const fracao = Math.min(0.99, (p.turmaAtual - 1) / n + dentro / n);
 	const onde = `(turma ${p.turmaAtual} de ${n})`;
-	return { fracao, texto: porArquivos ? `${nome}: baixando arquivo ${p.arquivoAtual} de ${p.totalArquivos} ${onde}` : `Lendo ${nome} ${onde}` };
+	const texto = porArquivos
+		? `${nome}: baixando arquivo ${p.arquivoAtual} de ${p.totalArquivos} ${onde}`
+		: p.etapa === "tarefas" ? `${nome}: lendo tarefas ${onde}`
+		: p.etapa === "noticias" ? `${nome}: lendo notícias ${onde}`
+		: `Lendo ${nome} ${onde}`;
+	return { fracao, texto };
 }
 
 // ─── títulos ─────────────────────────────────────────────────────────────────
@@ -335,6 +345,14 @@ export function montarDoSigaa(
 		importadoEm: t0?.importadoEm ?? agora,
 		revisadoEm: agora,
 		sigaa: { idTurma: lida.idTurma, ...(lida.sufixo ? { sufixo: lida.sufixo } : {}), sincronizadoEm: agora },
+		// Tarefas: o que o SIGAA mostra agora. Notícias: idem, mas o texto já lido de
+		// uma notícia fica (ele é lido uma vez só, quando a notícia é nova).
+		tarefas: lida.tarefas,
+		noticias: lida.noticias.map((n) => {
+			if (n.texto !== undefined) return n;
+			const antiga = t0?.noticias?.find((x) => x.sigaaId === n.sigaaId);
+			return antiga?.texto !== undefined ? { ...n, texto: antiga.texto } : n;
+		}),
 	});
 
 	// Provas futuras que ganharam tópicos com esta leitura.

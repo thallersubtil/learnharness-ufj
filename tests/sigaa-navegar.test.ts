@@ -75,9 +75,9 @@ describe("navegar pelo SIGAA", () => {
 		await lerSigaa(sessao, portal, {
 			jaBaixado: (_l, id) => id === "5001",
 			aoLerTurma: () => {},
-			progresso: (p) => passos.push(p.etapa === "turma" ? `turma ${p.turmaAtual}/${p.totalTurmas}` : `arquivo ${p.arquivoAtual}/${p.totalArquivos}`),
+			progresso: (p) => passos.push(p.etapa === "turma" ? `turma ${p.turmaAtual}/${p.totalTurmas}` : p.etapa === "arquivos" ? `arquivo ${p.arquivoAtual}/${p.totalArquivos}` : p.etapa),
 		});
-		assert.deepEqual(passos, ["turma 1/2", "arquivo 1/3", "arquivo 2/3", "arquivo 3/3", "turma 2/2", "arquivo 1/1"]);
+		assert.deepEqual(passos, ["turma 1/2", "tarefas", "noticias", "arquivo 1/3", "arquivo 2/3", "arquivo 3/3", "turma 2/2", "tarefas", "noticias", "arquivo 1/1"]);
 	});
 
 	it("arquivo grande (acima de 26 MiB) é baixado e fica disponível como os outros (pedido do dono)", async () => {
@@ -89,6 +89,29 @@ describe("navegar pelo SIGAA", () => {
 		const leitura = await lerSigaa(sessao, portal, { jaBaixado: () => false, aoLerTurma: (_l, b) => baixados.push(...b) });
 		assert.deepEqual(leitura.falhas, []);
 		assert.equal(baixados.find((x) => x.sigaaId === "5001")!.bytes.length, 27 * 1024 * 1024);
+	});
+
+	it("lê tarefas e notícias, abrindo o texto só das notícias desconhecidas", async () => {
+		const f = await iniciarSigaaFalso();
+		abertos.push(f);
+		const sessao = new SigaaSessao({ base: f.base, esperarMs: 0 });
+		const portal = await entrar(sessao, "aluno.teste", "segredo");
+		const lidas: SigaaTurmaLida[] = [];
+		await lerSigaa(sessao, portal, { jaBaixado: () => true, noticiaConhecida: (_l, id) => id === "8002", aoLerTurma: (l) => lidas.push(l) });
+		const a = lidas[0]!;
+		assert.deepEqual(a.tarefas.map((t) => [t.titulo, t.fim, t.hora, t.temArquivo]), [["Lista 3", "2026-11-26", "23:59", true], ["Trabalho 1", "2026-12-02", "18:00", false]]);
+		assert.deepEqual(a.noticias.map((n) => [n.sigaaId, n.titulo, n.data, n.texto]), [["8001", "Revisão na sexta", "2026-11-20", "Teremos revisão na sexta, sala 2."], ["8002", "Sem aula hoje", "2026-11-18", undefined]]);
+		assert.deepEqual(f.noticiasAbertas, ["8001"], "só a desconhecida foi aberta");
+	});
+
+	it("progresso passa por tarefas e notícias", async () => {
+		const f = await iniciarSigaaFalso();
+		abertos.push(f);
+		const sessao = new SigaaSessao({ base: f.base, esperarMs: 0 });
+		const portal = await entrar(sessao, "aluno.teste", "segredo");
+		const etapas: string[] = [];
+		await lerSigaa(sessao, portal, { jaBaixado: () => true, noticiaConhecida: () => true, aoLerTurma: () => {}, progresso: (p) => etapas.push(p.etapa) });
+		assert.deepEqual(etapas.slice(0, 3), ["turma", "tarefas", "noticias"]);
 	});
 
 	it("aoLerTurma é chamada uma vez por turma, na ordem do portal", async () => {

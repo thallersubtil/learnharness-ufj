@@ -30,6 +30,8 @@ function dadosSigaa() {
 			],
 			avaliacoes: [{ sigaaId: "999", data: "2026-09-10", descricao: "2ª unidade" }],
 			arquivos: [{ sigaaId: "55", titulo: "Slides da regra da cadeia", descricao: "", topicoDeAula: "Regra da cadeia" }],
+			tarefas: [],
+			noticias: [],
 		},
 		{ materia: null, turma: null, referencias: refs },
 		"2026-09-01T12:00:00.000Z",

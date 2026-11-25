@@ -94,6 +94,19 @@ describe("sincronização", () => {
 		assert.equal((await res.json()).error, "Informe usuário e senha.");
 	});
 
+	it("a segunda sincronização não abre notícia nenhuma", async () => {
+		const { f, s } = await montar();
+		await s.conectar("aluno.teste", "segredo");
+		await s.emAndamento();
+		assert.deepEqual(f.noticiasAbertas, ["8001", "8002"]);
+		const turma = bibliotecaStore.readTurma("ICE0001", TURMA)!;
+		assert.equal(turma.noticias![0]!.texto, "Teremos revisão na sexta, sala 2.");
+		assert.equal(turma.tarefas!.length, 2);
+		s.sincronizarAgora();
+		await s.emAndamento();
+		assert.deepEqual(f.noticiasAbertas, ["8001", "8002"], "nenhuma abertura nova");
+	});
+
 	it("a segunda sincronização não baixa de novo", async () => {
 		const { f, s } = await montar();
 		await s.conectar("aluno.teste", "segredo");

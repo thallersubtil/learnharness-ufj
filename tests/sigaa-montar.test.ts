@@ -35,6 +35,8 @@ function lida(over: Partial<SigaaTurmaLida> = {}): SigaaTurmaLida {
 		],
 		avaliacoes: [{ sigaaId: "999", data: "2026-09-10", descricao: "2ª unidade" }],
 		arquivos: [{ sigaaId: "55", titulo: "Slides da regra da cadeia", descricao: "", topicoDeAula: "Regra da cadeia" }],
+		tarefas: [{ titulo: "Lista 3", fim: "2026-09-08", hora: "23:59", instrucoes: "Exercícios 1 a 5.", temArquivo: false }],
+		noticias: [{ sigaaId: "8001", titulo: "Revisão", data: "2026-09-02", texto: "Revisão na sexta." }],
 		...over,
 	};
 }
@@ -198,6 +200,24 @@ describe("montar a partir do SIGAA", () => {
 		for (const id of ["limites", "derivadas", "antigo", "regra-da-cadeia"]) assert.ok(ids.includes(id), id);
 		assert.ok(!ids.includes("limites-2"), "o mesmo título é o mesmo tópico da matéria (revisão final, I3)");
 		assert.deepEqual(m.turma.aulas[0]!.topicos, ["limites"]);
+	});
+});
+
+describe("tarefas e notícias na montagem", () => {
+	it("notícia já lida mantém o texto; tarefas são substituídas", () => {
+		const antes = primeira();
+		assert.equal(antes.turma.noticias![0]!.texto, "Revisão na sexta.");
+		const m = proxima(antes, {
+			tarefas: [{ titulo: "Lista 4", fim: "2026-09-15", instrucoes: "", temArquivo: false }],
+			noticias: [{ sigaaId: "8001", titulo: "Revisão", data: "2026-09-02" }, { sigaaId: "8002", titulo: "Sala nova", data: "2026-09-05", texto: "Sala 7." }],
+		});
+		assert.deepEqual(m.turma.tarefas!.map((t) => t.titulo), ["Lista 4"]);
+		assert.deepEqual(m.turma.noticias!.map((n) => [n.sigaaId, n.texto]), [["8001", "Revisão na sexta."], ["8002", "Sala 7."]]);
+	});
+
+	it("progresso: textos de tarefas e notícias", () => {
+		assert.equal(progressoDaLeitura({ turma: "CÁLCULO I", turmaAtual: 2, totalTurmas: 5, etapa: "tarefas" }).texto, "Cálculo I: lendo tarefas (turma 2 de 5)");
+		assert.equal(progressoDaLeitura({ turma: "CÁLCULO I", turmaAtual: 2, totalTurmas: 5, etapa: "noticias" }).texto, "Cálculo I: lendo notícias (turma 2 de 5)");
 	});
 });
 

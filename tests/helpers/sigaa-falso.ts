@@ -53,8 +53,16 @@ export interface SigaaFalso {
 	/** Com `arquivosEmOutroHost`: a origem do servidor de arquivos e o que ele recebeu. */
 	origemArquivos?: string;
 	pedidosArquivos: { caminho: string; cookie: string | null }[];
+	/** Ids das notícias abertas ("Visualizar"), na ordem. */
+	noticiasAbertas: string[];
 	fechar(): Promise<void>;
 }
+
+/** As notícias das páginas de exemplo, pelo id, para a página de uma notícia aberta. */
+const NOTICIAS_FALSAS: Record<string, { titulo: string; data: string; texto: string }> = {
+	"8001": { titulo: "Revisão na sexta", data: "20/11/2026", texto: "Teremos revisão na sexta,<br> sala 2." },
+	"8002": { titulo: "Sem aula hoje", data: "18/11/2026", texto: "Não haverá aula hoje." },
+};
 
 interface Sessao {
 	id: string;
@@ -106,6 +114,7 @@ export async function iniciarSigaaFalso(opcoes: OpcoesSigaaFalso = {}): Promise<
 	const sessoes = new Map<string, Sessao>();
 	const pedidos: PedidoRecebido[] = [];
 	const pedidosArquivos: SigaaFalso["pedidosArquivos"] = [];
+	const noticiasAbertas: string[] = [];
 	// O servidor de arquivos separado (o arquivos.sistemas.ufj.edu.br de verdade).
 	let origemArquivos: string | undefined;
 	const servidorArquivos = opcoes.arquivosEmOutroHost
@@ -192,7 +201,7 @@ export async function iniciarSigaaFalso(opcoes: OpcoesSigaaFalso = {}): Promise<
 				opcoes.aoServir?.(caminho);
 				return html("portal.html", {}, 200, opcoes.portalSemTurmas ? (t) => t.replace(/<div id="turmas-portal">[\s\S]*?<\/table>\s*<\/div>/, "").replace(/<div id="atualizacoes-turma">[\s\S]*?<\/form>\s*<\/div>/, "") : undefined);
 			}
-			const extra = tratarTurma({ req, caminho, form, s, viewStateValido, html, opcoes, res, origemArquivos });
+			const extra = tratarTurma({ req, caminho, form, s, viewStateValido, html, opcoes, res, origemArquivos, noticiasAbertas });
 			if (extra) return;
 			res.writeHead(404, { "Content-Type": "text/plain" });
 			res.end("não encontrado");
@@ -206,6 +215,7 @@ export async function iniciarSigaaFalso(opcoes: OpcoesSigaaFalso = {}): Promise<
 		pedidos,
 		...(origemArquivos ? { origemArquivos } : {}),
 		pedidosArquivos,
+		noticiasAbertas,
 		fechar: async () => {
 			await new Promise<void>((ok) => servidor.close(() => ok()));
 			if (servidorArquivos) await new Promise<void>((ok) => servidorArquivos.close(() => ok()));
@@ -223,6 +233,7 @@ interface ContextoTurma {
 	opcoes: OpcoesSigaaFalso;
 	res: http.ServerResponse;
 	origemArquivos?: string;
+	noticiasAbertas: string[];
 }
 
 /** Os itens do menu das páginas de exemplo: sufixo da chave → rótulo. */
@@ -248,9 +259,9 @@ const ARQUIVOS_FALSOS: Record<string, { nome: string; tipo: string; corpo: Buffe
 	"6001": { nome: "Aula_1_Introducao.pdf", tipo: "application/pdf", corpo: Buffer.from("%PDF-1.4 introducao") },
 };
 
-const PAGINAS: Record<string, { principal: string; avaliacoes: string; arquivos: string }> = {
-	"1001": { principal: "turma-principal.html", avaliacoes: "turma-avaliacoes.html", arquivos: "turma-arquivos.html" },
-	"1002": { principal: "turma2-principal.html", avaliacoes: "turma-avaliacoes-vazia.html", arquivos: "turma2-arquivos.html" },
+const PAGINAS: Record<string, { principal: string; avaliacoes: string; arquivos: string; tarefas: string; noticias: string }> = {
+	"1001": { principal: "turma-principal.html", avaliacoes: "turma-avaliacoes.html", arquivos: "turma-arquivos.html", tarefas: "turma-tarefas.html", noticias: "turma-noticias.html" },
+	"1002": { principal: "turma2-principal.html", avaliacoes: "turma-avaliacoes-vazia.html", arquivos: "turma2-arquivos.html", tarefas: "turma-tarefas-vazia.html", noticias: "turma-avaliacoes-vazia.html" },
 };
 
 /** As páginas de dentro das turmas. Devolve true se respondeu. */
@@ -284,7 +295,19 @@ function tratarTurma(c: ContextoTurma): boolean {
 			res.end("erro interno");
 			return true;
 		}
-		c.html(rotulo === "Avaliações" ? paginas.avaliacoes : rotulo === "Arquivos" ? paginas.arquivos : paginas.principal);
+		c.html(rotulo === "Avaliações" ? paginas.avaliacoes : rotulo === "Arquivos" ? paginas.arquivos : rotulo === "Tarefas" ? paginas.tarefas : rotulo === "Notícias" ? paginas.noticias : paginas.principal);
+		return true;
+	}
+	// Abrir uma notícia ("Visualizar") a partir da lista.
+	if (caminho === "/sigaa/ava/NoticiaTurma/listar.jsf" && form.has("j_id_jsp_6_249") && paginas) {
+		const n = NOTICIAS_FALSAS[form.get("id") ?? ""];
+		if (!c.viewStateValido() || !n) {
+			c.html(paginas.principal);
+			return true;
+		}
+		c.noticiasAbertas.push(form.get("id")!);
+		opcoes.aoServir?.(caminho, "noticia");
+		c.html("turma-noticia.html", { TITULO: n.titulo, DATA: n.data, TEXTO: n.texto });
 		return true;
 	}
 	// Download pela listagem de Arquivos.

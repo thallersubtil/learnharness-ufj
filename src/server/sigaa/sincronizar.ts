@@ -132,6 +132,7 @@ export function createSincronizacao(deps: SincronizacaoDeps) {
 			const avisos: string[] = [];
 			const leitura = await lerSigaa(sessao, portal, {
 				jaBaixado: (l, sigaaId) => deps.biblioteca.readReferencias(l.codigo, idTurmaSigaa(l.semestre, l.sufixo)).arquivos.some((a) => a.sigaaId === sigaaId),
+				noticiaConhecida: (l, sigaaId) => (deps.biblioteca.readTurma(l.codigo, idTurmaSigaa(l.semestre, l.sufixo))?.noticias ?? []).some((n) => n.sigaaId === sigaaId && n.texto !== undefined),
 				aoLerTurma: (lida, baixados) => aoLerTurma(lida, baixados, avisos),
 				progresso: (p) => {
 					em.progresso = progressoDaLeitura(p);

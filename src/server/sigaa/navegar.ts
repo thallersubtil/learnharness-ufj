@@ -9,6 +9,7 @@
  */
 
 import { normalizarTitulo, type ProgressoLeitura, type SigaaTurmaLida } from "../../core/sigaa.ts";
+import type { Noticia } from "../../core/biblioteca.ts";
 import { SigaaCanceladaError, SigaaEstruturaError, SigaaSessaoExpiradaError } from "./erros.ts";
 import type { Pagina, SigaaSessao } from "./http.ts";
 import { ipynbParaTexto } from "./ipynb.ts";
@@ -17,11 +18,13 @@ import { lerArquivos, type ArquivoNaLista } from "./ler-arquivos.ts";
 import { lerAvaliacoes } from "./ler-avaliacoes.ts";
 import { lerPortal, type TurmaNoPortal } from "./ler-portal.ts";
 import { lerCabecalho, lerDocente, lerMenu, lerTopicos, type ItemDeMenu } from "./ler-turma.ts";
+import { lerNoticias, lerTextoDaNoticia } from "./ler-noticias.ts";
+import { lerTarefas } from "./ler-tarefas.ts";
 import { PORTAL, ehTelaDeLogin } from "./login.ts";
 
 export { ipynbParaTexto } from "./ipynb.ts";
 
-export const SECOES_LIDAS = ["Avaliações", "Arquivos"] as const;
+export const SECOES_LIDAS = ["Avaliações", "Arquivos", "Tarefas", "Notícias"] as const;
 
 export const SECOES_PROIBIDAS: readonly string[] = [
 	"Participantes",
@@ -58,6 +61,8 @@ export interface LeituraDoSigaa {
 
 export interface OpcoesLeitura {
 	jaBaixado: (lida: Pick<SigaaTurmaLida, "codigo" | "semestre" | "sufixo">, sigaaId: string) => boolean;
+	/** Notícia já guardada (pelo id): o texto dela não é aberto de novo. Ausente: nenhuma é conhecida. */
+	noticiaConhecida?: (lida: Pick<SigaaTurmaLida, "codigo" | "semestre" | "sufixo">, sigaaId: string) => boolean;
 	/** Chamada (síncrona) ao fim de cada turma, com os arquivos novos dela; quem grava é o chamador. */
 	aoLerTurma: (lida: SigaaTurmaLida, baixados: ArquivoBaixado[]) => void;
 	/** Chamada a cada turma e a cada arquivo baixado, para a barra de progresso. */
@@ -120,6 +125,21 @@ async function lerTurma(sessao: SigaaSessao, portal: Pagina, t: TurmaNoPortal, o
 	const cab = lerCabecalho(principal.html);
 	const menu = lerMenu(principal.html);
 	const secAvaliacoes = await abrirSecao(sessao, principal, menu, "Avaliações");
+	opcoes.progresso?.({ ...onde, etapa: "tarefas" });
+	const secTarefas = await abrirSecao(sessao, principal, menu, "Tarefas");
+	opcoes.progresso?.({ ...onde, etapa: "noticias" });
+	const secNoticias = await abrirSecao(sessao, principal, menu, "Notícias");
+	const noticias: Noticia[] = [];
+	for (const n of secNoticias ? lerNoticias(secNoticias.html) : []) {
+		const { link, ...resto } = n;
+		if (opcoes.noticiaConhecida?.(cab, n.sigaaId)) {
+			noticias.push(resto);
+			continue;
+		}
+		// Notícia nova: abre uma vez para guardar o texto (a partir da página da lista).
+		const aberta = checarSessao(await clicar(sessao, secNoticias!, link));
+		noticias.push({ ...resto, texto: lerTextoDaNoticia(aberta.html) });
+	}
 	let secArquivos = await abrirSecao(sessao, principal, menu, "Arquivos");
 	const lista: ArquivoNaLista[] = secArquivos ? lerArquivos(secArquivos.html) : [];
 
@@ -159,6 +179,8 @@ async function lerTurma(sessao: SigaaSessao, portal: Pagina, t: TurmaNoPortal, o
 		topicos: lerTopicos(principal.html),
 		avaliacoes: secAvaliacoes ? lerAvaliacoes(secAvaliacoes.html) : [],
 		arquivos: lista.map(({ link: _l, ...a }) => a),
+		tarefas: secTarefas ? lerTarefas(secTarefas.html) : [],
+		noticias,
 	};
 	if (opcoes.parar?.()) throw new SigaaCanceladaError();
 	opcoes.aoLerTurma(lida, baixados);

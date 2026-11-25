@@ -50,6 +50,8 @@ function turma() {
 			],
 			avaliacoes: [{ sigaaId: "999", data: "2026-09-10", descricao: "2ª unidade" }],
 			arquivos: [],
+			tarefas: [],
+			noticias: [],
 		},
 		{ materia: null, turma: null, referencias: { formato: 1, arquivos: [] } },
 		"2026-09-01T12:00:00.000Z",
