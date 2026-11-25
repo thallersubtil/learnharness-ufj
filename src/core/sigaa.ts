@@ -110,7 +110,11 @@ export function normalizarTitulo(s: string): string {
 		.trim();
 }
 
-const CONECTIVOS = new Set(["a", "o", "e", "de", "da", "do", "das", "dos", "em", "para", "com"]);
+// Artigos, preposições e contrações que ficam em minúscula no meio do nome.
+const CONECTIVOS = new Set([
+	"a", "o", "e", "as", "os", "à", "às", "ao", "aos", "de", "da", "do", "das", "dos", "em", "na", "no", "nas", "nos",
+	"para", "por", "pela", "pelo", "pelas", "pelos", "com", "sem", "ou",
+]);
 const ROMANOS = /^(i|ii|iii|iv|v|vi|vii|viii|ix|x)$/;
 
 /** "PROGRAMAÇÃO ORIENTADA A OBJETOS" → "Programação Orientada a Objetos". */

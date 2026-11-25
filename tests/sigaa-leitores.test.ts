@@ -26,6 +26,17 @@ describe("portal", () => {
 	});
 });
 
+describe("portal sem a lista de turmas", () => {
+	const sem = (links: string) => `<html><body><div id="conteudo">${links}</div></body></html>`;
+	const link = (form: string, id: string, texto: string) =>
+		`<form id="${form}" action="/sigaa/portais/discente/discente.jsf"><a href="#" onclick="if(typeof jsfcljs == 'function'){jsfcljs(document.getElementById('${form}'),{'${form}:x':'${form}:x','idTurma':'${id}'},'');}return false">${texto}</a></form>`;
+
+	it("só usa links dos formulários de turma conhecidos (revisão final, #16)", () => {
+		const html = sem(link("formAtualizacoesTurmas", "1001", "CÁLCULO TESTE (2026.2)") + link("formRelatorioNotas", "9999", "Relatório de notas"));
+		assert.deepEqual(lerPortal(html).map((t) => [t.idTurma, t.nome]), [["1001", "CÁLCULO TESTE"]]);
+	});
+});
+
 describe("turma", () => {
 	it("cabeçalho com acento decodificado", () => {
 		assert.deepEqual(lerCabecalho(pagina("turma-principal.html")), { codigo: "ICE0001", nome: "CÁLCULO TESTE", semestre: "2026-2", sufixo: "TA" });

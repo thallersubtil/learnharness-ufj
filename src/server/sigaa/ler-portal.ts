@@ -16,6 +16,8 @@ export interface TurmaNoPortal {
 	link: LinkJsf;
 }
 
+const FORMS_DE_TURMA = /^(form_acessarTurmaVirtual|formAtualizacoesTurmas)$/;
+
 export function lerPortal(html: string): TurmaNoPortal[] {
 	const doc = documento(html);
 	const out: TurmaNoPortal[] = [];
@@ -29,11 +31,13 @@ export function lerPortal(html: string): TurmaNoPortal[] {
 		out.push({ idTurma, nome: limpo(a.textContent), link: { form: link.form, params: { ...link.params, idTurma } } });
 	}
 	if (out.length > 0) return out;
-	// Sem a lista (outra versão do portal): qualquer comando com idTurma.
+	// Sem a lista (outra versão do portal): só os comandos dos formulários de
+	// turma conhecidos (a lista e o quadro de atualizações), nunca outro link
+	// que por acaso leve um idTurma.
 	for (const a of Array.from(doc.querySelectorAll("a[onclick]"))) {
 		const link = linkJsf(a.getAttribute("onclick"));
 		const idTurma = link?.params.idTurma;
-		if (!link || !idTurma || vistos.has(idTurma)) continue;
+		if (!link || !idTurma || vistos.has(idTurma) || !FORMS_DE_TURMA.test(link.form)) continue;
 		vistos.add(idTurma);
 		out.push({ idTurma, nome: limpo(a.textContent).replace(/\s*\(\d{4}\.\d\)\s*$/, ""), link });
 	}

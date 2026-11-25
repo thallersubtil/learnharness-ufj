@@ -193,6 +193,10 @@ describe("ajudantes de título", () => {
 		assert.equal(nomeDeDisciplina("CÁLCULO I"), "Cálculo I");
 		assert.equal(nomeDeDisciplina("ESTRUTURA DE DADOS I"), "Estrutura de Dados I");
 		assert.equal(nomeDeDisciplina("ARQUITETURA DE COMPUTADORES"), "Arquitetura de Computadores");
+		assert.equal(nomeDeDisciplina("INTRODUÇÃO À COMPUTAÇÃO"), "Introdução à Computação");
+		assert.equal(nomeDeDisciplina("SISTEMAS NA NUVEM E NO CAMPO"), "Sistemas na Nuvem e no Campo");
+		assert.equal(nomeDeDisciplina("ÉTICA AO LONGO DA HISTÓRIA POR AUTORES"), "Ética ao Longo da História por Autores");
+		assert.equal(nomeDeDisciplina("À PROCURA DE PADRÕES"), "À Procura de Padrões", "a primeira palavra sempre maiúscula");
 	});
 
 	it("ehTopicoDeProva", () => {
