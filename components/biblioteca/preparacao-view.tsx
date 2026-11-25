@@ -18,13 +18,15 @@ import { DataEditavel } from "./data-editavel";
 import { Input } from "@/components/ui/input";
 import { Aviso, BibliotecaPagina, Secao, lerResposta, textoDias } from "./comum";
 
-export function PreparacaoTela({ view, onAprender, onPraticar, onHoras, onData, ocupado = false }: {
+export function PreparacaoTela({ view, onAprender, onPraticar, onHoras, onData, onRevisar, ocupado = false }: {
 	view: PreparacaoView;
 	onAprender: (t: TopicoPreparacao) => void;
 	onPraticar: (t: TopicoPreparacao) => void;
 	onHoras: (horas: number | null) => void;
 	/** Mudar a data da prova daqui mesmo (spec SIGAA §7.5). */
 	onData?: (data: string | null) => void;
+	/** Abrir um chat de revisão da prova inteira (spec chat+SIGAA §5.4). */
+	onRevisar?: () => void;
 	ocupado?: boolean;
 }) {
 	const [horas, setHoras] = useState(view.horas === null ? "" : String(view.horas).replace(".", ","));
@@ -45,6 +47,8 @@ export function PreparacaoTela({ view, onAprender, onPraticar, onHoras, onData, 
 					<span className="font-title text-xl">{avaliacao.nome}</span>
 					{onData ? <DataEditavel data={avaliacao.data} origem={avaliacao.origemData} onSalvar={onData} /> : avaliacao.data && <span className="text-sm">{formatarData(avaliacao.data)}</span>}
 					<span className="text-sm font-medium">{textoDias(view.dias)}</span>
+					<span className="flex-1" />
+					{onRevisar && <Button type="button" size="sm" disabled={ocupado} onClick={onRevisar}>Revisar para a prova</Button>}
 				</div>
 				<p className="mt-1 text-sm text-muted-foreground">
 					{view.materia.nome}{view.turma.docente ? ` · ${view.turma.docente}` : ""}
@@ -132,11 +136,14 @@ export function PreparacaoScreen({ codigo, turmaId, avaliacaoId }: { codigo: str
 	useServerEvent("chats-changed", carregar);
 
 	async function abrir(t: TopicoPreparacao, kind: "teach" | "practice") {
+		await iniciar({ title: kind === "teach" ? t.promptAprender : t.promptPraticar, ...(kind === "practice" ? { kind: "practice" as const } : {}), ufjContext: t.ufjContext, prefill: kind === "teach" ? t.promptAprender : t.promptPraticar });
+	}
+
+	async function iniciar(body: Parameters<SessionStarter["start"]>[0]) {
 		setOcupado(true);
 		setErro(null);
 		try {
-			const prompt = kind === "teach" ? t.promptAprender : t.promptPraticar;
-			const destino = await starter.current.start({ title: prompt, ...(kind === "practice" ? { kind: "practice" as const } : {}), ufjContext: t.ufjContext, prefill: prompt }, fetch);
+			const destino = await starter.current.start(body, fetch);
 			router.push(destino);
 		} catch (e) {
 			setErro((e as Error).message);
@@ -177,7 +184,7 @@ export function PreparacaoScreen({ codigo, turmaId, avaliacaoId }: { codigo: str
 		>
 			{erro && <Aviso tom="erro">{erro}</Aviso>}
 			{!view && !erro && <p className="text-sm text-muted-foreground">Carregando…</p>}
-			{view && <PreparacaoTela key={`${view.avaliacao.id}:${view.horas}`} view={view} ocupado={ocupado} onAprender={(t) => void abrir(t, "teach")} onPraticar={(t) => void abrir(t, "practice")} onHoras={(h) => void horas(h)} onData={(d) => void data(d)} />}
+			{view && <PreparacaoTela key={`${view.avaliacao.id}:${view.horas}`} view={view} ocupado={ocupado} onAprender={(t) => void abrir(t, "teach")} onPraticar={(t) => void abrir(t, "practice")} onHoras={(h) => void horas(h)} onData={(d) => void data(d)} onRevisar={() => void iniciar({ title: view.revisao.prompt, ufjContext: view.revisao.ufjContext, prefill: view.revisao.prompt })} />}
 		</BibliotecaPagina>
 	);
 }

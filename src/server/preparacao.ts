@@ -19,7 +19,7 @@ import {
 } from "../core/biblioteca.ts";
 import { UFJ_ORIGENS, type UfjContextRef, type UfjOrigem } from "../core/contracts.ts";
 import { newUfjContextMessage, type GraphContextPick, type LhMarkerMessage } from "../core/native-messages.ts";
-import { composeUfjContextText, formatarDataCurta, promptAprender, promptPraticar, type UfjContextPayload } from "../core/ufj-context.ts";
+import { composeUfjContextText, formatarDataCurta, promptAprender, promptPraticar, promptRevisao, type UfjContextPayload } from "../core/ufj-context.ts";
 import { diasAte, proximosPassos, sinaisPorTopico, type PreparacaoView, type TopicoPreparacao } from "../core/preparacao.ts";
 import type { BibliotecaStore, EstudoStore } from "../core/ports.ts";
 import type { ChatSummary, GraphNode } from "../core/contracts.ts";
@@ -241,6 +241,10 @@ export function preparacaoView(ref: { materia: string; turma: string; avaliacao:
 		topicos,
 		passos: proximosPassos(topicos),
 		avisos: topicos.length > 0 ? [] : !turma.sigaa ? [SEM_ESCOPO] : avaliacao.data ? [SIGAA_SEM_TOPICOS] : [SIGAA_SEM_DATA],
+		revisao: {
+			ufjContext: { materia: materia.codigo, turma: turma.id, avaliacao: avaliacao.id, origem: "prova" },
+			prompt: promptRevisao({ materia: materia.codigo, turma: turma.id, avaliacao: avaliacao.id, origem: "prova", materiaNome: materia.nome, docente: turma.docente.nome, avaliacaoNome: avaliacao.nome, ...(avaliacao.data ? { data: avaliacao.data } : {}) }),
+		},
 	};
 }
 

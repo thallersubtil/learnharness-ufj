@@ -121,11 +121,36 @@ describe("preparação com data editável", () => {
 			turma: { id: "2026-2-turma-ta", semestre: "2026-2", docente: "" },
 			avaliacao: { id: "sigaa-999", nome: "2ª unidade", tipo: "prova-escrita", data: "2026-09-10", origemData: "sigaa", escopo: { topicos: [] } },
 			dias: 5, horas: null, criteriosMedia: "", topicos: [], passos: [], avisos: [],
+			revisao: { ufjContext: { materia: "ICE0001", turma: "2026-2-turma-ta", avaliacao: "sigaa-999", origem: "prova" }, prompt: "Quero revisar para a 2ª unidade de Disciplina Teste (10/09)." },
 		};
 		const html = renderToStaticMarkup(<PreparacaoTela view={view} ocupado={false} onAprender={noop} onPraticar={noop} onHoras={noop} onData={noop} />);
 		assert.match(html, /do SIGAA/);
 		assert.match(html, /Disciplina Teste/);
 		assert.doesNotMatch(html, /Disciplina Teste · </);
+	});
+
+	it("a preparação tem Revisar para a prova (spec chat+SIGAA §5.4)", () => {
+		const view: PreparacaoView = {
+			materia: { codigo: "ICE0001", nome: "Disciplina Teste" },
+			turma: { id: "2026-2-turma-ta", semestre: "2026-2", docente: "" },
+			avaliacao: { id: "sigaa-999", nome: "2ª unidade", tipo: "prova-escrita", data: "2026-09-10", origemData: "sigaa", escopo: { topicos: [] } },
+			dias: 5, horas: null, criteriosMedia: "", topicos: [], passos: [], avisos: [],
+			revisao: { ufjContext: { materia: "ICE0001", turma: "2026-2-turma-ta", avaliacao: "sigaa-999", origem: "prova" }, prompt: "Quero revisar para a 2ª unidade de Disciplina Teste (10/09)." },
+		};
+		const html = renderToStaticMarkup(<PreparacaoTela view={view} ocupado={false} onAprender={noop} onPraticar={noop} onHoras={noop} onRevisar={noop} />);
+		assert.match(html, /<button[^>]*>Revisar para a prova<\/button>/);
+	});
+
+	it("sem onRevisar o botão não aparece", () => {
+		const view: PreparacaoView = {
+			materia: { codigo: "ICE0001", nome: "Disciplina Teste" },
+			turma: { id: "2026-2-turma-ta", semestre: "2026-2", docente: "" },
+			avaliacao: { id: "sigaa-999", nome: "2ª unidade", tipo: "prova-escrita", data: "2026-09-10", origemData: "sigaa", escopo: { topicos: [] } },
+			dias: 5, horas: null, criteriosMedia: "", topicos: [], passos: [], avisos: [],
+			revisao: { ufjContext: { materia: "ICE0001", turma: "2026-2-turma-ta", avaliacao: "sigaa-999", origem: "prova" }, prompt: "Quero revisar para a 2ª unidade de Disciplina Teste (10/09)." },
+		};
+		const html = renderToStaticMarkup(<PreparacaoTela view={view} ocupado={false} onAprender={noop} onPraticar={noop} onHoras={noop} />);
+		assert.doesNotMatch(html, /Revisar para a prova/);
 	});
 });
 

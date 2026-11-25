@@ -93,4 +93,6 @@ export interface PreparacaoView {
 	topicos: TopicoPreparacao[];
 	passos: Passo[];
 	avisos: string[];
+	/** "Revisar para a prova" (spec chat+SIGAA §5.4): o vínculo da prova inteira e a mensagem pré-preenchida. */
+	revisao: { ufjContext: UfjContextRef; prompt: string };
 }
