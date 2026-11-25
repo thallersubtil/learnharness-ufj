@@ -8,11 +8,14 @@ import { lerPortal } from "../src/server/sigaa/ler-portal.ts";
 import { lerCabecalho, lerDocente, lerMenu, lerTopicos } from "../src/server/sigaa/ler-turma.ts";
 import { lerAvaliacoes } from "../src/server/sigaa/ler-avaliacoes.ts";
 import { lerArquivos } from "../src/server/sigaa/ler-arquivos.ts";
+import { lerTarefas } from "../src/server/sigaa/ler-tarefas.ts";
+import { lerNoticias, lerTextoDaNoticia } from "../src/server/sigaa/ler-noticias.ts";
 import { SigaaEstruturaError } from "../src/server/sigaa/erros.ts";
 
 /** A página como o SIGAA a serve (ISO-8859-1) e como a sessão a decodifica. */
-function pagina(nome: string): string {
-	const texto = fs.readFileSync(path.join(import.meta.dirname, "fixtures", "sigaa", nome), "utf8").split("{{VIEWSTATE}}").join("j_id1");
+function pagina(nome: string, troca: Record<string, string> = {}): string {
+	let texto = fs.readFileSync(path.join(import.meta.dirname, "fixtures", "sigaa", nome), "utf8").split("{{VIEWSTATE}}").join("j_id1");
+	for (const [k, v] of Object.entries(troca)) texto = texto.split(`{{${k}}}`).join(v);
 	return new TextDecoder("windows-1252").decode(Buffer.from(texto, "latin1"));
 }
 
@@ -89,5 +92,33 @@ describe("seções", () => {
 		]);
 		assert.equal(a[0]!.link.form, "formAva");
 		assert.equal(a[0]!.link.params.id, "5001");
+	});
+});
+
+describe("tarefas e notícias", () => {
+	it("tarefas: título, período, instruções e anexo", () => {
+		assert.deepEqual(lerTarefas(pagina("turma-tarefas.html")), [
+			{ titulo: "Lista 3", inicio: "2026-11-20", fim: "2026-11-26", hora: "23:59", instrucoes: "Resolva os exercícios 1 a 5 do capítulo de derivadas. Entregue em PDF.", temArquivo: true },
+			{ titulo: "Trabalho 1", inicio: "2026-11-25", fim: "2026-12-02", hora: "18:00", instrucoes: "Proposta do jogo e diagrama de classes.", temArquivo: false },
+		]);
+	});
+
+	it("tarefas vazia vira []", () => {
+		assert.deepEqual(lerTarefas(pagina("turma-tarefas-vazia.html")), []);
+	});
+
+	it("notícias: id, título, data e comando", () => {
+		const n = lerNoticias(pagina("turma-noticias.html"));
+		assert.deepEqual(n.map(({ link: _l, ...x }) => x), [
+			{ sigaaId: "8001", titulo: "Revisão na sexta", data: "2026-11-20" },
+			{ sigaaId: "8002", titulo: "Sem aula hoje", data: "2026-11-18" },
+		]);
+		assert.equal(n[0]!.link.form, "j_id_jsp_6_249");
+		assert.equal(n[0]!.link.params.id, "8001");
+	});
+
+	it("texto da notícia sem o rodapé 'Cadastrado por'", () => {
+		const html = pagina("turma-noticia.html", { TITULO: "Revisão na sexta", DATA: "20/11/2026", TEXTO: "Teremos revisão na sexta,<br> sala 2." });
+		assert.equal(lerTextoDaNoticia(html), "Teremos revisão na sexta, sala 2.");
 	});
 });
