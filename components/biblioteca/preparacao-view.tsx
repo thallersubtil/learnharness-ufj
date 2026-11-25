@@ -96,7 +96,7 @@ export function PreparacaoTela({ view, onAprender, onPraticar, onHoras, onData, 
 								<p className="mt-1 flex flex-wrap gap-x-3 text-xs">
 									{t.sessoes.map((s) => (
 										<Link key={s.id} href={`/chat/${encodeURIComponent(s.id)}`} className="text-muted-foreground underline">
-											{s.kind === "practice" ? "Prática" : "Aula"}: {s.title}
+											{s.rotulo}: {s.title}
 										</Link>
 									))}
 								</p>

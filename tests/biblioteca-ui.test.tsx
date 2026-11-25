@@ -88,7 +88,7 @@ describe("PreparacaoTela", () => {
 		turma: { id: "2026-2-prof-exemplo", semestre: "2026-2", docente: "Prof. Exemplo" },
 		avaliacao: { id: "N3", nome: "N3 — Avaliação escrita", tipo: "prova-escrita", data: "2026-12-08", pontos: 10, escopo: { topicos: [] } },
 		dias: 20, horas: 6, criteriosMedia: "M=(N1+N2+N3)/3",
-		topicos: [topico("a", { aulaFeita: true, sessoes: [{ id: "s1", title: "Aula de A", kind: "teach" }] }), topico("b", { aulaFeita: true, praticado: true }), topico("c")],
+		topicos: [topico("a", { aulaFeita: true, sessoes: [{ id: "s1", title: "Aula de A", kind: "teach", rotulo: "Aula" }] }), topico("b", { aulaFeita: true, praticado: true }), topico("c")],
 		passos: [{ tipo: "aprender", topico: "c", texto: "Aprender: C" }, { tipo: "praticar", topico: "a", texto: "Praticar: A" }],
 		avisos: [],
 	};

@@ -10,7 +10,7 @@ import { formatarDataCurta, type UfjContextPayload } from "@/src/core";
  * O modelo lê o texto completo do marcador; isto é o rosto dele para o aluno.
  */
 export function UfjContextCard({ data }: { data: UfjContextPayload }) {
-	const partes = [data.materiaNome, data.avaliacaoNome, data.data ? formatarDataCurta(data.data) : null, data.topicoTitulo ?? null].filter((p): p is string => !!p);
+	const partes = [data.materiaNome, data.avaliacaoNome ?? null, data.data ? formatarDataCurta(data.data) : null, data.topicoTitulo ?? null, data.arquivoTitulo ?? null].filter((p): p is string => !!p);
 	return (
 		<div data-testid="ufj-context-card" className="my-1 flex items-center gap-2 rounded-lg border border-dashed border-border/70 px-3 py-2 text-xs text-muted-foreground">
 			<GraduationCapIcon aria-hidden="true" className="size-3.5 shrink-0" />

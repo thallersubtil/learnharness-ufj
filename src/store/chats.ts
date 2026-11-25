@@ -82,7 +82,7 @@ function getChat(id: string): ChatRecord | null {
 function ufjSummaryOf(messages: readonly LhMessage[]): Pick<ChatSummary, "ufj"> {
 	const p = ufjContextOf(messages);
 	if (!p) return {};
-	return { ufj: { materia: p.materia, turma: p.turma, avaliacao: p.avaliacao, ...(p.topico ? { topico: p.topico } : {}) } };
+	return { ufj: { materia: p.materia, turma: p.turma, ...(p.avaliacao ? { avaliacao: p.avaliacao } : {}), ...(p.topico ? { topico: p.topico } : {}), ...(p.origem ? { origem: p.origem } : {}), ...(p.arquivo ? { arquivo: p.arquivo } : {}) } };
 }
 
 function listChats(): ChatSummary[] {

@@ -11,14 +11,15 @@ import {
 	BibliotecaEntradaError,
 	BibliotecaFormatoError,
 	isValidCodigo,
+	isValidNomeArquivo,
 	isValidSlug,
 	type Aula,
 	type Materia,
 	type Turma,
 } from "../core/biblioteca.ts";
-import type { UfjContextRef } from "../core/contracts.ts";
+import { UFJ_ORIGENS, type UfjContextRef, type UfjOrigem } from "../core/contracts.ts";
 import { newUfjContextMessage, type GraphContextPick, type LhMarkerMessage } from "../core/native-messages.ts";
-import { composeUfjContextText, promptAprender, promptPraticar, type UfjContextPayload } from "../core/ufj-context.ts";
+import { composeUfjContextText, formatarDataCurta, promptAprender, promptPraticar, type UfjContextPayload } from "../core/ufj-context.ts";
 import { diasAte, proximosPassos, sinaisPorTopico, type PreparacaoView, type TopicoPreparacao } from "../core/preparacao.ts";
 import type { BibliotecaStore, EstudoStore } from "../core/ports.ts";
 import type { ChatSummary, GraphNode } from "../core/contracts.ts";
@@ -44,16 +45,28 @@ const defaultDeps = (): PreparacaoDeps => ({
 
 const DESCONHECIDO = "Matéria, turma, avaliação ou tópico desconhecido.";
 
-/** Valida a forma de um ufjContext vindo do navegador. */
+/** Valida a forma de um ufjContext vindo do navegador (spec chat+SIGAA §5.4):
+ *  tópico (avaliação + tópico), material (arquivo) ou prova (avaliação, sem tópico). */
 export function parseUfjContextRef(raw: unknown): UfjContextRef {
 	const r = raw as Record<string, unknown> | null;
 	if (!r || typeof r !== "object") throw new BibliotecaEntradaError(DESCONHECIDO);
-	const { materia, turma, avaliacao, topico } = r;
+	const { materia, turma, avaliacao, topico, origem, arquivo } = r;
 	if (typeof materia !== "string" || !isValidCodigo(materia)) throw new BibliotecaEntradaError(DESCONHECIDO);
 	if (typeof turma !== "string" || !isValidSlug(turma)) throw new BibliotecaEntradaError(DESCONHECIDO);
-	if (typeof avaliacao !== "string" || !avaliacao.trim()) throw new BibliotecaEntradaError(DESCONHECIDO);
+	if (origem !== undefined && !(UFJ_ORIGENS as readonly unknown[]).includes(origem)) throw new BibliotecaEntradaError(DESCONHECIDO);
 	if (topico !== undefined && (typeof topico !== "string" || !isValidSlug(topico))) throw new BibliotecaEntradaError(DESCONHECIDO);
-	return { materia, turma, avaliacao, ...(topico ? { topico } : {}) };
+	if (avaliacao !== undefined && (typeof avaliacao !== "string" || !avaliacao.trim())) throw new BibliotecaEntradaError(DESCONHECIDO);
+	if (arquivo !== undefined && (typeof arquivo !== "string" || !isValidNomeArquivo(arquivo))) throw new BibliotecaEntradaError(DESCONHECIDO);
+	const o = (origem as UfjOrigem | undefined) ?? "topico";
+	if (o === "material" ? !arquivo : !avaliacao) throw new BibliotecaEntradaError(DESCONHECIDO);
+	return {
+		materia,
+		turma,
+		...(avaliacao ? { avaliacao: avaliacao as string } : {}),
+		...(topico ? { topico } : {}),
+		...(origem ? { origem: o } : {}),
+		...(arquivo ? { arquivo: arquivo as string } : {}),
+	};
 }
 
 /** Matéria, turma, avaliação e tópico (ativo) de um vínculo — ou BibliotecaEntradaError. */
@@ -75,11 +88,72 @@ export function resolveUfjRef(ref: UfjContextRef, deps: Pick<PreparacaoDeps, "bi
 }
 
 export function chaveHoras(ref: Pick<UfjContextRef, "materia" | "turma" | "avaliacao">): string {
-	return `${ref.materia}/${ref.turma}/${ref.avaliacao}`;
+	return `${ref.materia}/${ref.turma}/${ref.avaliacao ?? ""}`;
 }
 
-/** O marcador ufj-context de uma sessão criada por um tópico da biblioteca. */
+const NOMES_REF = (deps: Pick<PreparacaoDeps, "biblioteca">, materia: Materia, turma: Turma) => {
+	const refs = deps.biblioteca.readReferencias(materia.codigo, turma.id).arquivos;
+	const nomeado = (a: (typeof refs)[number]) => ({ caminho: deps.biblioteca.referenciaPath(materia.codigo, turma.id, a.arquivo), titulo: a.titulo ?? a.arquivo });
+	return { refs, nomeado };
+};
+
+function lerMateriaETurma(ref: UfjContextRef, deps: Pick<PreparacaoDeps, "biblioteca">): { materia: Materia; turma: Turma } {
+	let materia: Materia | null;
+	let turma: Turma | null;
+	try {
+		materia = deps.biblioteca.readMateria(ref.materia);
+		turma = materia ? deps.biblioteca.readTurma(ref.materia, ref.turma) : null;
+	} catch (err) {
+		if (err instanceof BibliotecaFormatoError) throw err;
+		throw new BibliotecaEntradaError(DESCONHECIDO);
+	}
+	if (!materia || !turma) throw new BibliotecaEntradaError(DESCONHECIDO);
+	return { materia, turma };
+}
+
+/** Vínculo de material (spec chat+SIGAA §5.4): o arquivo em primeiro lugar; sem avaliação. */
+function marcadorDeMaterial(ref: UfjContextRef, deps: PreparacaoDeps): LhMarkerMessage {
+	const { materia, turma } = lerMateriaETurma(ref, deps);
+	const { refs, nomeado } = NOMES_REF(deps, materia, turma);
+	const arq = refs.find((a) => a.arquivo === ref.arquivo);
+	if (!arq) throw new BibliotecaEntradaError("Material não encontrado.");
+	const topicoId = ref.topico ?? arq.topicos[0];
+	const topico = topicoId ? materia.topicos.find((t) => t.id === topicoId && !t.arquivado) : undefined;
+	const aulas: Aula[] = topico ? turma.aulas.filter((a) => a.topicos.includes(topico.id)).sort((x, y) => x.ordem - y.ordem) : [];
+	const outros = topico ? refs.filter((a) => a.arquivo !== arq.arquivo && a.topicos.includes(topico.id)).map(nomeado) : [];
+	const content = composeUfjContextText({ materia, turma, ...(topico ? { topico } : {}), aulas, material: nomeado(arq), referencias: outros, dias: null, horas: null });
+	const payload: UfjContextPayload = {
+		materia: materia.codigo, turma: turma.id, origem: "material", arquivo: arq.arquivo,
+		...(topico ? { topico: topico.id, topicoTitulo: topico.titulo } : {}),
+		materiaNome: materia.nome, docente: turma.docente.nome, arquivoTitulo: arq.titulo ?? arq.arquivo,
+	};
+	return newUfjContextMessage(payload, content);
+}
+
+/** Vínculo de prova inteira (spec chat+SIGAA §5.4): todos os tópicos do escopo e seus arquivos. */
+function marcadorDeProva(ref: UfjContextRef, deps: PreparacaoDeps): LhMarkerMessage {
+	const { materia, turma } = lerMateriaETurma(ref, deps);
+	const avaliacao = turma.avaliacoes.find((a) => a.id === ref.avaliacao);
+	if (!avaliacao) throw new BibliotecaEntradaError(DESCONHECIDO);
+	const { refs, nomeado } = NOMES_REF(deps, materia, turma);
+	const topicos = avaliacao.escopo.topicos.map((id) => materia.topicos.find((t) => t.id === id && !t.arquivado)).filter((t): t is NonNullable<typeof t> => !!t);
+	const topicosDaProva = topicos.map((t) => ({ titulo: t.titulo, datas: turma.aulas.filter((a) => a.topicos.includes(t.id) && a.data).sort((x, y) => x.ordem - y.ordem).map((a) => formatarDataCurta(a.data!)) }));
+	const ids = new Set(topicos.map((t) => t.id));
+	const referencias = refs.filter((a) => a.topicos.some((id) => ids.has(id))).map(nomeado);
+	const dias = avaliacao.data && deps.diasAte ? deps.diasAte(avaliacao.data) : null;
+	const horas = deps.estudo.readHoras(chaveHoras({ materia: materia.codigo, turma: turma.id, avaliacao: avaliacao.id }));
+	const content = composeUfjContextText({ materia, turma, avaliacao, aulas: [], topicosDaProva, referencias, dias, horas });
+	const payload: UfjContextPayload = {
+		materia: materia.codigo, turma: turma.id, avaliacao: avaliacao.id, origem: "prova",
+		materiaNome: materia.nome, docente: turma.docente.nome, avaliacaoNome: avaliacao.nome, ...(avaliacao.data ? { data: avaliacao.data } : {}),
+	};
+	return newUfjContextMessage(payload, content);
+}
+
+/** O marcador ufj-context de uma sessão criada pela biblioteca: por tópico (padrão), por material ou pela prova inteira. */
 export function ufjMarkerFor(ref: UfjContextRef, deps: PreparacaoDeps = defaultDeps()): LhMarkerMessage {
+	if (ref.origem === "material") return marcadorDeMaterial(ref, deps);
+	if (ref.origem === "prova") return marcadorDeProva(ref, deps);
 	const { materia, turma, avaliacao, topico, aulas } = resolveUfjRef(ref, deps);
 	const refs = deps.biblioteca.readReferencias(materia.codigo, turma.id).arquivos.filter((a) => a.topicos.includes(topico.id));
 	const referencias = refs.map((a) => ({ caminho: deps.biblioteca.referenciaPath(materia.codigo, turma.id, a.arquivo), titulo: a.titulo ?? a.arquivo }));

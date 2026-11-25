@@ -294,9 +294,17 @@ export interface PlanBlockData {
 export interface UfjContextRef {
 	materia: string;
 	turma: string;
-	avaliacao: string;
+	/** A prova; ausente só num vínculo de material (spec chat+SIGAA §5.4). */
+	avaliacao?: string;
 	topico?: string;
+	/** De onde a sessão nasceu: um tópico (padrão), um material ou a prova inteira. */
+	origem?: UfjOrigem;
+	/** O arquivo da turma, num vínculo de material. */
+	arquivo?: string;
 }
+
+export const UFJ_ORIGENS = ["topico", "material", "prova"] as const;
+export type UfjOrigem = (typeof UFJ_ORIGENS)[number];
 
 /** Saved-session summary with a message count instead of full history.
  * Phase and pending-input flags derive from native transcript events.
