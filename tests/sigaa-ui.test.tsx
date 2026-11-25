@@ -42,6 +42,23 @@ describe("Conta UFJ", () => {
 		assert.match(html, /<button[^>]*disabled=""[^>]*>Sincronizar agora<\/button>/);
 	});
 
+	it("sincronizando mostra a barra de progresso e o que está acontecendo", () => {
+		const html = conta({ ...OCIOSO, situacao: "sincronizando", progresso: { fracao: 0.4, texto: "Estrutura de Dados I: baixando arquivo 12 de 29 (turma 3 de 5)" } });
+		assert.match(html, /role="progressbar"/);
+		assert.match(html, /aria-valuenow="40"/);
+		assert.match(html, /Estrutura de Dados I: baixando arquivo 12 de 29 \(turma 3 de 5\)/);
+		assert.match(html, /Você pode continuar usando o app enquanto isso\./);
+		const cartao = renderToStaticMarkup(<CartaoSigaa estado={{ ...OCIOSO, situacao: "sincronizando", progresso: { fracao: 0.4, texto: "Lendo Cálculo I (turma 1 de 5)" } }} onSincronizar={noop} />);
+		assert.match(cartao, /role="progressbar"/);
+		assert.match(cartao, /Lendo Cálculo I \(turma 1 de 5\)/);
+	});
+
+	it("sincronizando sem progresso ainda mostra a barra começando", () => {
+		const html = conta({ ...OCIOSO, situacao: "sincronizando" });
+		assert.match(html, /role="progressbar"/);
+		assert.match(html, /Entrando no SIGAA…/);
+	});
+
 	it("senha recusada mostra o aviso e o formulário", () => {
 		const html = conta({ ...OCIOSO, situacao: "senha-recusada", erro: "O SIGAA recusou a senha guardada. Conecte a conta de novo." });
 		assert.match(html, /O SIGAA recusou a senha guardada\. Conecte a conta de novo\./);

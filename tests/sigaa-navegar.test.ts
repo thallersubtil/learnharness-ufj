@@ -67,6 +67,21 @@ describe("navegar pelo SIGAA", () => {
 		assert.ok(baixouId(f, "5002"));
 	});
 
+	it("avisa o progresso: cada turma e cada arquivo baixado", async () => {
+		const f = await iniciarSigaaFalso();
+		abertos.push(f);
+		const sessao = new SigaaSessao({ base: f.base, esperarMs: 0 });
+		const portal = await entrar(sessao, "aluno.teste", "segredo");
+		const passos: string[] = [];
+		await lerSigaa(sessao, portal, {
+			jaBaixado: (_l, id) => id === "5001",
+			aoLerTurma: () => {},
+			tamanhoMaximo: 26 * 1024 * 1024,
+			progresso: (p) => passos.push(p.etapa === "turma" ? `turma ${p.turmaAtual}/${p.totalTurmas}` : `arquivo ${p.arquivoAtual}/${p.totalArquivos}`),
+		});
+		assert.deepEqual(passos, ["turma 1/2", "arquivo 1/3", "arquivo 2/3", "arquivo 3/3", "turma 2/2", "arquivo 1/1"]);
+	});
+
 	it("aoLerTurma é chamada uma vez por turma, na ordem do portal", async () => {
 		const { lidas } = await ler();
 		assert.deepEqual(lidas.map((x) => x.lida.idTurma), ["1001", "1002"]);

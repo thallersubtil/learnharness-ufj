@@ -13,7 +13,7 @@ import { MAX_IMPORT_BODY_BYTES } from "../../../lib/notes-import-limits.ts";
 import { BibliotecaEntradaError } from "../../core/biblioteca.ts";
 import { emit } from "../../core/events.ts";
 import type { BibliotecaStore, EstadoSigaa, SigaaStore } from "../../core/ports.ts";
-import { idTurmaSigaa, montarDoSigaa, nomeDeDisciplina, type SigaaTurmaLida } from "../../core/sigaa.ts";
+import { idTurmaSigaa, montarDoSigaa, nomeDeDisciplina, progressoDaLeitura, type SigaaTurmaLida } from "../../core/sigaa.ts";
 import { sigaaStore } from "../../store/sigaa.ts";
 import { stores } from "../stores.ts";
 import { SigaaEstruturaError, SigaaSenhaRecusadaError } from "./erros.ts";
@@ -36,26 +36,34 @@ export interface SincronizacaoDeps {
 	decifrar: (cifrado: string) => Promise<string>;
 	novaSessao: () => SigaaSessao;
 	agora: () => Date;
-	/** Avisa as telas: "sigaa-changed" e "biblioteca-changed". */
-	emitir: () => void;
+	/** Avisa as telas: "sigaa-changed" e, salvo quando é só progresso, "biblioteca-changed". */
+	emitir: (soProgresso?: boolean) => void;
 	/** Onde fica a sincronização em andamento. Em produção, um só para o processo
 	 *  inteiro (cada rota do Next pode ter sua cópia deste módulo). */
-	compartilhado?: { andamento: Promise<void> | null };
+	compartilhado?: EmAndamento;
+}
+
+/** A sincronização em andamento e o seu progresso (só na memória). */
+export interface EmAndamento {
+	andamento: Promise<void> | null;
+	progresso?: { fracao: number; texto: string } | null;
 }
 
 const KEY = Symbol.for("lh.sigaa.sincronizacao");
 
 /** O estado compartilhado entre as cópias do módulo (rotas compiladas à parte). */
-function compartilhadoGlobal(): { andamento: Promise<void> | null } {
-	const g = globalThis as typeof globalThis & { [KEY]?: { andamento: Promise<void> | null } };
+function compartilhadoGlobal(): EmAndamento {
+	const g = globalThis as typeof globalThis & { [KEY]?: EmAndamento };
 	g[KEY] ??= { andamento: null };
 	return g[KEY];
 }
 
+const ENTRANDO = { fracao: 0, texto: "Entrando no SIGAA…" };
+
 const SENHA_GUARDADA_RECUSADA = "O SIGAA recusou a senha guardada. Conecte a conta de novo.";
 
 export function createSincronizacao(deps: SincronizacaoDeps) {
-	const em = deps.compartilhado ?? { andamento: null };
+	const em: EmAndamento = deps.compartilhado ?? { andamento: null };
 	const agora = () => deps.agora().toISOString();
 
 	/** Marca a sincronização como em andamento ANTES de qualquer await; devolve o "terminou". */
@@ -64,8 +72,10 @@ export function createSincronizacao(deps: SincronizacaoDeps) {
 		em.andamento = new Promise<void>((r) => {
 			fim = r;
 		});
+		em.progresso = ENTRANDO;
 		return () => {
 			em.andamento = null;
+			em.progresso = null;
 			fim();
 		};
 	}
@@ -74,6 +84,7 @@ export function createSincronizacao(deps: SincronizacaoDeps) {
 		const e = deps.sigaa.readEstado();
 		// Um "sincronizando" sem leitura em curso sobrou de um app fechado no meio.
 		if (e.situacao === "sincronizando" && !em.andamento) return { ...e, situacao: deps.sigaa.readConta() ? "ocioso" : "sem-conta" };
+		if (em.andamento && em.progresso && e.situacao === "sincronizando") return { ...e, progresso: em.progresso };
 		return e;
 	}
 
@@ -114,6 +125,10 @@ export function createSincronizacao(deps: SincronizacaoDeps) {
 				jaBaixado: (l, sigaaId) => deps.biblioteca.readReferencias(l.codigo, idTurmaSigaa(l.semestre, l.sufixo)).arquivos.some((a) => a.sigaaId === sigaaId),
 				aoLerTurma: (lida, baixados) => aoLerTurma(lida, baixados, avisos),
 				tamanhoMaximo: MAX_IMPORT_BODY_BYTES,
+				progresso: (p) => {
+					em.progresso = progressoDaLeitura(p);
+					deps.emitir(true);
+				},
 			});
 			for (const f of leitura.falhas) avisos.push(`Não consegui ler ${nomeDeDisciplina(f.nome)}: ${f.erro}`);
 			if (leitura.turmasLidas === 0) {
@@ -180,7 +195,8 @@ export function createSincronizacao(deps: SincronizacaoDeps) {
 			const inicio = agora();
 			const { erro: _e, ...resto } = e0;
 			const terminar = reservar();
-			gravar({ ...resto, situacao: "sincronizando", usuario: conta.usuario, ultimaTentativa: inicio });
+			// Os avisos da sincronização anterior saem: na tela, pareceriam deste momento.
+			gravar({ ...resto, situacao: "sincronizando", usuario: conta.usuario, ultimaTentativa: inicio, avisos: [] });
 			void (async () => {
 				try {
 					const senha = await deps.decifrar(conta.senhaCifrada);
@@ -218,9 +234,9 @@ export const sincronizacao: Sincronizacao = createSincronizacao({
 	decifrar: decifrarSegredo,
 	novaSessao: () => new SigaaSessao({ base: baseDoSigaa(), esperarMs: 800 }),
 	agora: () => new Date(),
-	emitir: () => {
+	emitir: (soProgresso) => {
 		emit("sigaa-changed", {});
-		emit("biblioteca-changed", {});
+		if (!soProgresso) emit("biblioteca-changed", {});
 	},
 	compartilhado: compartilhadoGlobal(),
 });

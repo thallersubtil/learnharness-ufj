@@ -72,6 +72,30 @@ export interface Montagem {
 	avisos: string[];
 }
 
+// ─── progresso da sincronização ──────────────────────────────────────────────
+
+/** Onde a leitura está: a turma (de quantas) e, nela, o arquivo sendo baixado. */
+export interface ProgressoLeitura {
+	turma: string;
+	turmaAtual: number;
+	totalTurmas: number;
+	etapa: "turma" | "arquivos";
+	arquivoAtual?: number;
+	totalArquivos?: number;
+}
+
+/** A fração da barra (anda por turma e, dentro dela, por arquivo; nunca 100% antes do fim) e a frase. */
+export function progressoDaLeitura(p: ProgressoLeitura): { fracao: number; texto: string } {
+	const n = Math.max(1, p.totalTurmas);
+	const nome = nomeDeDisciplina(p.turma);
+	const porArquivos = p.etapa === "arquivos" && p.totalArquivos && p.arquivoAtual;
+	// 10% da fatia da turma para abrir as páginas, 90% para os downloads.
+	const dentro = porArquivos ? 0.1 + (0.9 * (p.arquivoAtual! - 1)) / p.totalArquivos! : 0.1;
+	const fracao = Math.min(0.99, (p.turmaAtual - 1) / n + dentro / n);
+	const onde = `(turma ${p.turmaAtual} de ${n})`;
+	return { fracao, texto: porArquivos ? `${nome}: baixando arquivo ${p.arquivoAtual} de ${p.totalArquivos} ${onde}` : `Lendo ${nome} ${onde}` };
+}
+
 // ─── títulos ─────────────────────────────────────────────────────────────────
 
 /** Sem acentos, minúsculas, espaços colapsados, sem pontuação no fim. */

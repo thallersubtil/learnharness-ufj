@@ -241,6 +241,37 @@ describe("sincronização", () => {
 		await a.s.emAndamento();
 	});
 
+	it("durante a sincronização o estado traz o progresso; no fim, não", async () => {
+		const vistos: { fracao: number; texto: string }[] = [];
+		let s: Awaited<ReturnType<typeof montar>>["s"] | null = null;
+		const m = await montar({
+			aoServir: (_c, rotulo) => {
+				const p = s?.estado().progresso;
+				if (p && rotulo === "download") vistos.push(p);
+			},
+		});
+		s = m.s;
+		const e = await s.conectar("aluno.teste", "segredo");
+		assert.equal(e.situacao, "sincronizando");
+		assert.match(e.progresso!.texto, /^Lendo Cálculo Teste \(turma 1 de 2\)$/);
+		await s.emAndamento();
+		assert.ok(vistos.length >= 4, JSON.stringify(vistos));
+		assert.ok(vistos.some((p) => /baixando arquivo 2 de 4 \(turma 1 de 2\)/.test(p.texto)), JSON.stringify(vistos));
+		assert.ok(vistos.every((p, i) => p.fracao > 0 && p.fracao < 1 && (i === 0 || p.fracao >= vistos[i - 1]!.fracao)), "a barra só anda para a frente");
+		assert.equal(s.estado().progresso, undefined);
+	});
+
+	it("começar uma sincronização limpa os avisos da anterior", async () => {
+		const { s } = await montar();
+		sigaaStore.writeConta({ usuario: "aluno.teste", senhaCifrada: "teste:segredo" });
+		sigaaStore.writeEstado({ situacao: "erro", usuario: "aluno.teste", erro: "falhou antes", avisos: ["Não consegui ler Cálculo Teste: antigo."] });
+		const e = s.sincronizarAgora();
+		assert.equal(e.situacao, "sincronizando");
+		assert.deepEqual(e.avisos, []);
+		assert.equal(e.erro, undefined);
+		await s.emAndamento();
+	});
+
 	it("senha guardada recusada: senha-recusada e não tenta de novo", async () => {
 		const { f, s } = await montar();
 		sigaaStore.writeConta({ usuario: "aluno.teste", senhaCifrada: "teste:antiga" });

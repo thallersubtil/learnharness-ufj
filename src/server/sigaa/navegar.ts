@@ -8,7 +8,7 @@
  * cai interrompe a leitura, sem novo login.
  */
 
-import { normalizarTitulo, type SigaaTurmaLida } from "../../core/sigaa.ts";
+import { normalizarTitulo, type ProgressoLeitura, type SigaaTurmaLida } from "../../core/sigaa.ts";
 import { SigaaEstruturaError, SigaaSessaoExpiradaError } from "./erros.ts";
 import type { Pagina, SigaaSessao } from "./http.ts";
 import { ipynbParaTexto } from "./ipynb.ts";
@@ -61,7 +61,8 @@ export interface OpcoesLeitura {
 	/** Chamada (síncrona) ao fim de cada turma, com os arquivos novos dela; quem grava é o chamador. */
 	aoLerTurma: (lida: SigaaTurmaLida, baixados: ArquivoBaixado[]) => void;
 	tamanhoMaximo: number;
-	progresso?: (texto: string) => void;
+	/** Chamada a cada turma e a cada arquivo baixado, para a barra de progresso. */
+	progresso?: (p: ProgressoLeitura) => void;
 }
 
 /** O nome do arquivo no Content-Disposition, seguro para gravar. */
@@ -103,7 +104,7 @@ async function abrirSecao(sessao: SigaaSessao, principal: Pagina, menu: ItemDeMe
 	return pagina;
 }
 
-async function lerTurma(sessao: SigaaSessao, portal: Pagina, t: TurmaNoPortal, opcoes: OpcoesLeitura, avisos: string[]): Promise<void> {
+async function lerTurma(sessao: SigaaSessao, portal: Pagina, t: TurmaNoPortal, opcoes: OpcoesLeitura, avisos: string[], onde: Pick<ProgressoLeitura, "turma" | "turmaAtual" | "totalTurmas">): Promise<void> {
 	const principal = await abrirTurma(sessao, portal, t.idTurma);
 	const cab = lerCabecalho(principal.html);
 	const menu = lerMenu(principal.html);
@@ -112,9 +113,9 @@ async function lerTurma(sessao: SigaaSessao, portal: Pagina, t: TurmaNoPortal, o
 	const lista: ArquivoNaLista[] = secArquivos ? lerArquivos(secArquivos.html) : [];
 
 	const baixados: ArquivoBaixado[] = [];
-	for (const arq of lista) {
-		if (opcoes.jaBaixado(cab, arq.sigaaId)) continue;
-		opcoes.progresso?.(`Baixando ${arq.titulo}…`);
+	const novos = lista.filter((arq) => !opcoes.jaBaixado(cab, arq.sigaaId));
+	for (const [k, arq] of novos.entries()) {
+		opcoes.progresso?.({ ...onde, etapa: "arquivos", arquivoAtual: k + 1, totalArquivos: novos.length });
 		let link = arq.link;
 		let r = checarSessao(await clicar(sessao, secArquivos!, link));
 		if (!ehArquivo(r)) {
@@ -160,12 +161,13 @@ export async function lerSigaa(sessao: SigaaSessao, portal: Pagina, opcoes: Opco
 	let turmasLidas = 0;
 	let atual = portal;
 	for (const [i, t] of turmas.entries()) {
-		opcoes.progresso?.(`Lendo ${t.nome}…`);
+		const onde = { turma: t.nome, turmaAtual: i + 1, totalTurmas: turmas.length };
+		opcoes.progresso?.({ ...onde, etapa: "turma" });
 		const avisos: string[] = [];
 		try {
 			// Portal novo a cada turma: o ViewState muda depois de abrir a anterior.
 			if (i > 0) atual = checarSessao(await sessao.get(PORTAL));
-			await lerTurma(sessao, atual, t, opcoes, avisos);
+			await lerTurma(sessao, atual, t, opcoes, avisos, onde);
 			turmasLidas++;
 		} catch (err) {
 			falhas.push({ idTurma: t.idTurma, nome: t.nome, erro: err instanceof Error ? err.message : String(err) });

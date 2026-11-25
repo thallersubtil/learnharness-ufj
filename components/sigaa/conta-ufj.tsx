@@ -26,6 +26,22 @@ function UltimaSincronizacao({ estado }: { estado: EstadoSigaa }) {
 	return <p className="text-sm text-muted-foreground">{estado.ultimoSucesso ? `Última sincronização: ${dataHora(estado.ultimoSucesso)}` : "Ainda não sincronizou."}</p>;
 }
 
+/** A barra da sincronização: anda por turma e por arquivo, com a frase do que está acontecendo. */
+function BarraDeProgresso({ estado }: { estado: EstadoSigaa }) {
+	const p = estado.progresso ?? { fracao: 0, texto: "Entrando no SIGAA…" };
+	const pct = Math.round(Math.max(0, Math.min(1, p.fracao)) * 100);
+	return (
+		<div className="space-y-1">
+			<p role="status" className="text-sm">Sincronizando com o SIGAA…</p>
+			<div role="progressbar" aria-label="Progresso da sincronização" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} className="h-2 w-full max-w-md overflow-hidden rounded-full bg-muted">
+				<div className="h-full animate-pulse rounded-full bg-primary transition-[width] duration-500" style={{ width: `${Math.max(pct, 3)}%` }} />
+			</div>
+			<p className="text-sm text-muted-foreground">{p.texto}</p>
+			<p className="text-xs text-muted-foreground">Você pode continuar usando o app enquanto isso.</p>
+		</div>
+	);
+}
+
 function Avisos({ avisos }: { avisos: string[] }) {
 	return avisos.length ? <div className="space-y-2">{avisos.map((a) => <Aviso key={a}>{a}</Aviso>)}</div> : null;
 }
@@ -60,7 +76,7 @@ export function ContaUfj({ estado, ocupado, erro, onConectar, onSincronizar, onS
 				<div className="space-y-3">
 					<p className="text-sm">Conectado como <strong>{estado.usuario}</strong></p>
 					<UltimaSincronizacao estado={estado} />
-					{sincronizando && <p role="status" className="text-sm">Sincronizando com o SIGAA…</p>}
+					{sincronizando && <BarraDeProgresso estado={estado} />}
 					{estado.situacao === "erro" && estado.erro && <Aviso tom="erro">{estado.erro}</Aviso>}
 					<Avisos avisos={estado.avisos} />
 					<div className="flex flex-wrap gap-2">
@@ -108,7 +124,7 @@ export function CartaoSigaa({ estado, onSincronizar }: { estado: EstadoSigaa; on
 		<div className="space-y-2 rounded-lg border px-4 py-3">
 			<div className="flex flex-wrap items-center gap-3">
 				<div className="flex-1">
-					{estado.situacao === "sincronizando" ? <p role="status" className="text-sm">Sincronizando com o SIGAA…</p> : <UltimaSincronizacao estado={estado} />}
+					{estado.situacao === "sincronizando" ? <BarraDeProgresso estado={estado} /> : <UltimaSincronizacao estado={estado} />}
 				</div>
 				{onSincronizar && <Button type="button" size="sm" variant="outline" disabled={estado.situacao === "sincronizando"} onClick={onSincronizar}>Sincronizar agora</Button>}
 				<Link href="/conta-ufj" className="text-sm text-muted-foreground hover:underline">Conta UFJ</Link>

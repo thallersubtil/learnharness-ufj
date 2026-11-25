@@ -342,6 +342,8 @@ export interface EstadoSigaa {
 	ultimoSucesso?: string;
 	erro?: string;
 	avisos: string[];
+	/** Só durante uma sincronização (não vai para o disco): a fração da barra e a frase. */
+	progresso?: { fracao: number; texto: string };
 }
 
 /** Sob config.SIGAA_DIR, escrita atômica com permissão 0600. */

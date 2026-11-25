@@ -7,6 +7,7 @@ import {
 	ehTopicoDeProva,
 	idTurmaSigaa,
 	montarDoSigaa,
+	progressoDaLeitura,
 	nomeDeDisciplina,
 	type Montagem,
 	type Referencias,
@@ -172,6 +173,17 @@ describe("montar a partir do SIGAA", () => {
 		for (const id of ["limites", "derivadas", "antigo", "regra-da-cadeia"]) assert.ok(ids.includes(id), id);
 		assert.ok(!ids.includes("limites-2"), "o mesmo título é o mesmo tópico da matéria (revisão final, I3)");
 		assert.deepEqual(m.turma.aulas[0]!.topicos, ["limites"]);
+	});
+});
+
+describe("progresso da sincronização", () => {
+	it("a fração anda por turma e, dentro da turma, por arquivo", () => {
+		assert.deepEqual(progressoDaLeitura({ turma: "CÁLCULO I", turmaAtual: 1, totalTurmas: 5, etapa: "turma" }), { fracao: 0.02, texto: "Lendo Cálculo I (turma 1 de 5)" });
+		assert.deepEqual(progressoDaLeitura({ turma: "ESTRUTURA DE DADOS I", turmaAtual: 3, totalTurmas: 5, etapa: "arquivos", arquivoAtual: 12, totalArquivos: 29 }), {
+			fracao: 0.4 + (0.1 + (0.9 * 11) / 29) / 5,
+			texto: "Estrutura de Dados I: baixando arquivo 12 de 29 (turma 3 de 5)",
+		});
+		assert.ok(progressoDaLeitura({ turma: "X", turmaAtual: 5, totalTurmas: 5, etapa: "arquivos", arquivoAtual: 9, totalArquivos: 9 }).fracao < 1, "só chega a 100% quando termina");
 	});
 });
 
