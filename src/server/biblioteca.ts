@@ -10,6 +10,7 @@ import {
 	BibliotecaConflitoError,
 	BibliotecaEntradaError,
 	BibliotecaNaoEncontradaError,
+	isValidNomeArquivo,
 	parseMateria,
 	parseTurma,
 	type Materia,
@@ -134,6 +135,34 @@ export function createBibliotecaService(deps: BibliotecaServiceDeps) {
 			return { adicionados, sugestoes, custoUsd };
 		},
 
+		/** O arquivo da turma para ser aberto dentro do app (spec chat+SIGAA §5.5). */
+		abrirArquivo(codigo: string, turmaId: string, nome: string): { caminho: string; tipo: string; inline: boolean } {
+			if (!isValidNomeArquivo(nome)) throw new BibliotecaEntradaError(`Nome de arquivo inválido: "${nome}".`);
+			if (!biblioteca.readMateria(codigo) || !biblioteca.readTurma(codigo, turmaId)) throw new BibliotecaNaoEncontradaError("Turma não encontrada.");
+			if (!biblioteca.listReferenciaFiles(codigo, turmaId).includes(nome)) throw new BibliotecaNaoEncontradaError("Arquivo não encontrado.");
+			const { tipo, inline } = tipoDoArquivo(nome);
+			return { caminho: biblioteca.referenciaPath(codigo, turmaId, nome), tipo, inline };
+		},
+
+		/** Um arquivo extra do aluno, já ligado a um tópico de aula, sem passar pelo modelo. */
+		adicionarArquivo(codigo: string, turmaId: string, nome: string, bytes: Uint8Array, topicoId: string): { arquivo: string; reutilizado: boolean } {
+			const materia = biblioteca.readMateria(codigo);
+			const turma = materia ? biblioteca.readTurma(codigo, turmaId) : null;
+			if (!materia || !turma) throw new BibliotecaNaoEncontradaError("Turma não encontrada.");
+			const ext = nome.includes(".") ? nome.slice(nome.lastIndexOf(".")).toLowerCase() : "";
+			if (!(EXTENSOES_MATERIAIS as readonly string[]).includes(ext)) throw new BibliotecaEntradaError(`Tipo de arquivo não aceito: ${nome}`);
+			if (bytes.byteLength > MAX_IMPORT_BYTES) throw new BibliotecaEnvioGrandeError();
+			if (!materia.topicos.some((t) => t.id === topicoId && !t.arquivado)) throw new BibliotecaEntradaError("Tópico desconhecido.");
+			const r = biblioteca.addReferenciaFile(codigo, turmaId, nome, bytes);
+			const refs = biblioteca.readReferencias(codigo, turmaId);
+			const aula = turma.aulas.filter((a) => a.topicos.includes(topicoId)).sort((x, y) => x.ordem - y.ordem)[0];
+			const entrada: Referencias["arquivos"][number] = { arquivo: r.arquivo, sha256: r.sha256, titulo: r.arquivo, topicos: [topicoId], ...(aula ? { aula: aula.ordem } : {}) };
+			const i = refs.arquivos.findIndex((a) => a.arquivo === r.arquivo);
+			const arquivos = i < 0 ? [...refs.arquivos, entrada] : refs.arquivos.map((a, k) => (k === i ? { ...a, topicos: a.topicos.includes(topicoId) ? a.topicos : [...a.topicos, topicoId], ...(a.aula === undefined && aula ? { aula: aula.ordem } : {}) } : a));
+			biblioteca.writeReferencias(codigo, turmaId, { formato: 1, arquivos });
+			return { arquivo: r.arquivo, reutilizado: r.reutilizado };
+		},
+
 		/** Grava o mapeamento revisado arquivo → tópicos (substitui o referencias.json inteiro). */
 		salvarReferencias(codigo: string, turmaId: string, mapa: unknown) {
 			const materia = biblioteca.readMateria(codigo);
@@ -254,6 +283,16 @@ export function createBibliotecaService(deps: BibliotecaServiceDeps) {
 }
 
 export type BibliotecaService = ReturnType<typeof createBibliotecaService>;
+
+/** O tipo HTTP de um arquivo da turma e se o navegador o abre (inline) ou só baixa. */
+export function tipoDoArquivo(nome: string): { tipo: string; inline: boolean } {
+	const ext = nome.includes(".") ? nome.slice(nome.lastIndexOf(".")).toLowerCase() : "";
+	if (ext === ".pdf") return { tipo: "application/pdf", inline: true };
+	if ([".md", ".txt", ".c", ".h", ".py", ".java"].includes(ext)) return { tipo: "text/plain; charset=utf-8", inline: true };
+	if (ext === ".png") return { tipo: "image/png", inline: true };
+	if (ext === ".jpg" || ext === ".jpeg") return { tipo: "image/jpeg", inline: true };
+	return { tipo: "application/octet-stream", inline: false };
+}
 
 /** A instância de produção: os tópicos citados por sessões vêm do marcador ufj-context. */
 export const bibliotecaService: BibliotecaService = createBibliotecaService({
