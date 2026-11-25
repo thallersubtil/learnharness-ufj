@@ -9,7 +9,7 @@
  */
 
 import { normalizarTitulo, type ProgressoLeitura, type SigaaTurmaLida } from "../../core/sigaa.ts";
-import { SigaaEstruturaError, SigaaSessaoExpiradaError } from "./erros.ts";
+import { SigaaCanceladaError, SigaaEstruturaError, SigaaSessaoExpiradaError } from "./erros.ts";
 import type { Pagina, SigaaSessao } from "./http.ts";
 import { ipynbParaTexto } from "./ipynb.ts";
 import { clicar } from "./jsf.ts";
@@ -62,6 +62,8 @@ export interface OpcoesLeitura {
 	aoLerTurma: (lida: SigaaTurmaLida, baixados: ArquivoBaixado[]) => void;
 	/** Chamada a cada turma e a cada arquivo baixado, para a barra de progresso. */
 	progresso?: (p: ProgressoLeitura) => void;
+	/** Verdadeiro quando o aluno saiu da conta: a leitura para na próxima turma ou arquivo, sem gravar. */
+	parar?: () => boolean;
 }
 
 /** O nome do arquivo no Content-Disposition, seguro para gravar. */
@@ -124,6 +126,7 @@ async function lerTurma(sessao: SigaaSessao, portal: Pagina, t: TurmaNoPortal, o
 	const baixados: ArquivoBaixado[] = [];
 	const novos = lista.filter((arq) => !opcoes.jaBaixado(cab, arq.sigaaId));
 	for (const [k, arq] of novos.entries()) {
+		if (opcoes.parar?.()) throw new SigaaCanceladaError();
 		opcoes.progresso?.({ ...onde, etapa: "arquivos", arquivoAtual: k + 1, totalArquivos: novos.length });
 		let link = arq.link;
 		let r = checarSessao(await clicar(sessao, secArquivos!, link));
@@ -157,6 +160,7 @@ async function lerTurma(sessao: SigaaSessao, portal: Pagina, t: TurmaNoPortal, o
 		avaliacoes: secAvaliacoes ? lerAvaliacoes(secAvaliacoes.html) : [],
 		arquivos: lista.map(({ link: _l, ...a }) => a),
 	};
+	if (opcoes.parar?.()) throw new SigaaCanceladaError();
 	opcoes.aoLerTurma(lida, baixados);
 }
 
@@ -166,6 +170,7 @@ export async function lerSigaa(sessao: SigaaSessao, portal: Pagina, opcoes: Opco
 	let turmasLidas = 0;
 	let atual = portal;
 	for (const [i, t] of turmas.entries()) {
+		if (opcoes.parar?.()) break;
 		const onde = { turma: t.nome, turmaAtual: i + 1, totalTurmas: turmas.length };
 		opcoes.progresso?.({ ...onde, etapa: "turma" });
 		const avisos: string[] = [];
@@ -175,6 +180,7 @@ export async function lerSigaa(sessao: SigaaSessao, portal: Pagina, opcoes: Opco
 			await lerTurma(sessao, atual, t, opcoes, avisos, onde);
 			turmasLidas++;
 		} catch (err) {
+			if (err instanceof SigaaCanceladaError) break;
 			falhas.push({ idTurma: t.idTurma, nome: t.nome, erro: err instanceof Error ? err.message : String(err) });
 			if (err instanceof SigaaSessaoExpiradaError) break;
 		}

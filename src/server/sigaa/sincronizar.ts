@@ -46,6 +46,8 @@ export interface SincronizacaoDeps {
 export interface EmAndamento {
 	andamento: Promise<void> | null;
 	progresso?: { fracao: number; texto: string } | null;
+	/** O aluno saiu da conta durante a sincronização em andamento. */
+	cancelada?: boolean;
 }
 
 const KEY = Symbol.for("lh.sigaa.sincronizacao");
@@ -72,6 +74,7 @@ export function createSincronizacao(deps: SincronizacaoDeps) {
 			fim = r;
 		});
 		em.progresso = ENTRANDO;
+		em.cancelada = false;
 		return () => {
 			em.andamento = null;
 			em.progresso = null;
@@ -134,7 +137,10 @@ export function createSincronizacao(deps: SincronizacaoDeps) {
 					em.progresso = progressoDaLeitura(p);
 					deps.emitir(true);
 				},
+				parar: () => em.cancelada === true,
 			});
+			// Saiu da conta no meio: o estado "sem conta" que o sair() gravou fica.
+			if (em.cancelada) return;
 			for (const f of leitura.falhas) avisos.push(`Não consegui ler ${nomeDeDisciplina(f.nome)}: ${f.erro}`);
 			if (leitura.turmasLidas === 0) {
 				// Nada lido não é sucesso: o "último sucesso" continua o anterior.
@@ -144,7 +150,7 @@ export function createSincronizacao(deps: SincronizacaoDeps) {
 			}
 			gravar({ situacao: "ocioso", usuario, ultimaTentativa: inicio, ultimoSucesso: agora(), avisos });
 		} catch (err) {
-			falhou(err, usuario, inicio, anterior.ultimoSucesso);
+			if (!em.cancelada) falhou(err, usuario, inicio, anterior.ultimoSucesso);
 		} finally {
 			await sair(sessao);
 			deps.emitir();
@@ -205,11 +211,13 @@ export function createSincronizacao(deps: SincronizacaoDeps) {
 			void (async () => {
 				try {
 					const senha = await deps.decifrar(conta.senhaCifrada);
+					if (em.cancelada) return;
 					const sessao = deps.novaSessao();
 					const portal = await entrar(sessao, conta.usuario, senha);
+					if (em.cancelada) return void (await sair(sessao));
 					await lerEGravar(sessao, portal, conta.usuario, inicio);
 				} catch (err) {
-					falhou(err, conta.usuario, inicio, e0.ultimoSucesso);
+					if (!em.cancelada) falhou(err, conta.usuario, inicio, e0.ultimoSucesso);
 				}
 			})().finally(terminar);
 			return estado();
@@ -217,6 +225,8 @@ export function createSincronizacao(deps: SincronizacaoDeps) {
 
 		/** Apaga a conta e a senha guardada; os dados já baixados ficam. */
 		sair(): EstadoSigaa {
+			// Uma sincronização em andamento para na próxima turma ou arquivo e não grava mais nada.
+			if (em.andamento) em.cancelada = true;
 			deps.sigaa.apagarConta();
 			const e: EstadoSigaa = { situacao: "sem-conta", avisos: [] };
 			gravar(e);

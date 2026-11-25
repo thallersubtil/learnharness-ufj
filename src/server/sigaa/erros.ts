@@ -21,6 +21,14 @@ export class SigaaEstruturaError extends Error {
 	}
 }
 
+/** O aluno saiu da conta no meio da sincronização: a leitura para sem gravar mais nada. */
+export class SigaaCanceladaError extends Error {
+	constructor(message = "A sincronização foi cancelada.") {
+		super(message);
+		this.name = "SigaaCanceladaError";
+	}
+}
+
 export class SigaaSessaoExpiradaError extends Error {
 	constructor(message = "A sessão do SIGAA caiu no meio da leitura.") {
 		super(message);

@@ -300,6 +300,19 @@ describe("sincronização", () => {
 		assert.equal(downloads(f), antes, "nenhum download repetido");
 	});
 
+	it("Sair da conta durante a sincronização vale: a leitura para e nada mais é gravado (revisão final, #9)", async () => {
+		const { f, s } = await montar();
+		await s.conectar("aluno.teste", "segredo");
+		const e = s.sair();
+		assert.equal(e.situacao, "sem-conta");
+		await s.emAndamento();
+		assert.equal(s.estado().situacao, "sem-conta");
+		assert.equal(sigaaStore.readEstado().usuario, undefined, "o fim da leitura não regrava 'Conectado como'");
+		assert.equal(sigaaStore.readConta(), null);
+		assert.equal(bibliotecaStore.readTurma("ICE0002", "2026-2-turma-tb"), null, "a leitura parou antes da 2ª turma");
+		assert.ok(f.pedidos.some((p) => p.caminho.startsWith("/sigaa/logar.do?dispatch=logOff")), "sai da conta no SIGAA também");
+	});
+
 	it("senha guardada recusada: senha-recusada e não tenta de novo", async () => {
 		const { f, s } = await montar();
 		sigaaStore.writeConta({ usuario: "aluno.teste", senhaCifrada: "teste:antiga" });
