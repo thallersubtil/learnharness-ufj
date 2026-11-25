@@ -24,6 +24,7 @@ import { findTool } from "./find.ts";
 import { grepTool } from "./grep.ts";
 import { jobTools, type JobToolContext } from "./jobs.ts";
 import { proberGraphTools, type GraphToolContext } from "./graph.ts";
+import { ufjTool, type UfjToolDeps } from "./ufj.ts";
 import { activeProblemOf } from "../../core/native-messages.ts";
 import type { LhMessage } from "../../core/native-messages.ts";
 import { concludeResult, invalidInputResult, problemResult } from "../tool-execute.ts";
@@ -45,6 +46,8 @@ export interface PracticeToolContext {
 	 *  Each absent context (tests) = absent from the registry. */
 	graph?: GraphToolContext;
 	jobs?: JobToolContext;
+	/** UFJ (spec chat+SIGAA §5.3): presente = a ferramenta `ufj` é registrada. */
+	ufj?: UfjToolDeps;
 }
 
 /** TURN-SCOPED GATE STATE (the BKT incident, 2026-10-05): the gates used
@@ -215,5 +218,6 @@ export function practiceTools(ctx: PracticeToolContext, gate: PracticeGate = cre
 		...(jobs?.research ? { research: jobs.research } : {}),
 		...(jobs ? { pdf: jobs.pdf! } : {}),
 		...(ctx.graph ? proberGraphTools(ctx.graph) : {}),
+		...(ctx.ufj ? { ufj: ufjTool(ctx.ufj) } : {}),
 	});
 }
