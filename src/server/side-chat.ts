@@ -280,5 +280,6 @@ async function productionEngineFor(record: ChatRecord): Promise<SideEngine | Res
 interface SideChatGlobal { __lhSideChatService?: SideChatService }
 export const sideChats: SideChatService = ((globalThis as typeof globalThis & SideChatGlobal).__lhSideChatService ??= createSideChatService({
 	chatStore: stores.chatStore, engineFor: productionEngineFor, beforeAsk: awaitCompaction,
-	instructions: () => composeSideChatInstructions(effectiveSettings().agent.prompts, resumoUfj()),
+	// Sem o rodapé: a conversa lateral não tem a ferramenta `ufj`, então não deve ser mandada a usá-la.
+	instructions: () => composeSideChatInstructions(effectiveSettings().agent.prompts, resumoUfj(new Date(), { rodape: false })),
 }));

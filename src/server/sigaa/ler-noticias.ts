@@ -26,8 +26,8 @@ export function lerNoticias(html: string): NoticiaNaLista[] {
 	return out;
 }
 
-/** O texto de uma notícia aberta, sem "Cadastrado por". */
-export function lerTextoDaNoticia(html: string): string {
+/** O texto de uma notícia aberta, sem "Cadastrado por"; null quando a página não é uma notícia. */
+export function lerTextoDaNoticia(html: string): string | null {
 	const doc = documento(html);
 	const corpo = doc.querySelector(".conteudoNoticia, td.conteudoNoticia");
 	if (corpo) {
@@ -37,5 +37,5 @@ export function lerTextoDaNoticia(html: string): string {
 	// Sem a célula marcada: tudo depois de "Data:" e antes de "Cadastrado por".
 	const texto = limpo(doc.getElementById("conteudo")?.textContent ?? doc.body?.textContent);
 	const m = /Data:\s*\d{2}\/\d{2}\/\d{4}(?:\s+\d{2}:\d{2})?\s*(.*?)(?:\s*Cadastrado por:.*)?$/.exec(texto);
-	return m?.[1]?.trim() ?? texto;
+	return m?.[1]?.trim() || null;
 }

@@ -31,6 +31,14 @@ export interface SinaisDoTopico {
 	sessoes: SessaoDoTopico[];
 }
 
+/** As sessões "Revisar para a prova" desta avaliação (spec chat+SIGAA §5.4), da mais recente para a mais antiga. */
+export function revisoesDaProva(chats: readonly ChatSummary[], ref: { materia: string; avaliacao: string }): SessaoDoTopico[] {
+	return chats
+		.filter((c) => c.ufj?.origem === "prova" && c.ufj.materia === ref.materia && c.ufj.avaliacao === ref.avaliacao)
+		.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+		.map((c) => ({ id: c.id, title: c.title, kind: c.kind, rotulo: "Revisão" }));
+}
+
 /** Sinais por id de tópico, das sessões criadas pela biblioteca nesta matéria
  *  (os tópicos são da matéria, então valem sessões de qualquer turma). */
 export function sinaisPorTopico(chats: readonly ChatSummary[], ref: { materia: string }): Map<string, SinaisDoTopico> {
@@ -95,4 +103,6 @@ export interface PreparacaoView {
 	avisos: string[];
 	/** "Revisar para a prova" (spec chat+SIGAA §5.4): o vínculo da prova inteira e a mensagem pré-preenchida. */
 	revisao: { ufjContext: UfjContextRef; prompt: string };
+	/** As sessões de revisão já abertas para esta prova. */
+	revisoes: SessaoDoTopico[];
 }

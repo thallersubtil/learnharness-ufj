@@ -56,6 +56,15 @@ export function PreparacaoTela({ view, onAprender, onPraticar, onHoras, onData, 
 					{avaliacao.duracaoMin !== undefined && ` · ${avaliacao.duracaoMin} min`}
 				</p>
 				{(avaliacao.peso || view.criteriosMedia) && <p className="mt-1 text-xs text-muted-foreground">{avaliacao.peso ?? view.criteriosMedia}</p>}
+				{view.revisoes.length > 0 && (
+					<p data-revisoes className="mt-2 flex flex-wrap gap-x-3 text-xs">
+						{view.revisoes.map((s) => (
+							<Link key={s.id} href={`/chat/${encodeURIComponent(s.id)}`} className="text-muted-foreground underline">
+								{s.rotulo}: {s.title}
+							</Link>
+						))}
+					</p>
+				)}
 				<label className="mt-3 flex flex-wrap items-center gap-2 text-sm">
 					<span>Quanto tempo você tem para estudar para esta prova?</span>
 					<Input className="w-24" inputMode="decimal" aria-label="Horas disponíveis" value={horas} onChange={(e) => setHoras(e.target.value)} onBlur={salvarHoras} onKeyDown={(e) => { if (e.key === "Enter") salvarHoras(); }} />

@@ -99,7 +99,7 @@ describe("tarefas e notícias", () => {
 	it("tarefas: título, período, instruções e anexo", () => {
 		assert.deepEqual(lerTarefas(pagina("turma-tarefas.html")), [
 			{ titulo: "Lista 3", inicio: "2026-11-20", fim: "2026-11-26", hora: "23:59", instrucoes: "Resolva os exercícios 1 a 5 do capítulo de derivadas. Entregue em PDF.", temArquivo: true },
-			{ titulo: "Trabalho 1", inicio: "2026-11-25", fim: "2026-12-02", hora: "18:00", instrucoes: "Proposta do jogo e diagrama de classes.", temArquivo: false },
+			{ titulo: "Trabalho 1", inicio: "2026-11-25", fim: "2026-12-02", hora: "18:00", instrucoes: "Proposta do jogo e diagrama de classes. Apresentações de 01/12/2026 a 03/12/2026.", temArquivo: false },
 		]);
 	});
 
@@ -120,5 +120,6 @@ describe("tarefas e notícias", () => {
 	it("texto da notícia sem o rodapé 'Cadastrado por'", () => {
 		const html = pagina("turma-noticia.html", { TITULO: "Revisão na sexta", DATA: "20/11/2026", TEXTO: "Teremos revisão na sexta,<br> sala 2." });
 		assert.equal(lerTextoDaNoticia(html), "Teremos revisão na sexta, sala 2.");
+		assert.equal(lerTextoDaNoticia(pagina("turma-principal.html")), null, "a página da turma não é uma notícia");
 	});
 });

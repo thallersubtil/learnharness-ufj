@@ -178,6 +178,8 @@ export async function materiaisPostRoute(request: Request, codigo: string, turma
 		const arquivos = await Promise.all(files.map(async (f) => ({ nome: f.name, bytes: new Uint8Array(await f.arrayBuffer()) })));
 		if (typeof topico === "string" && topico.trim()) {
 			if (arquivos.length === 0) throw new BibliotecaEntradaError("Escolha pelo menos um arquivo.");
+			// Confere todos antes de gravar o primeiro: um arquivo recusado não deixa os outros pela metade.
+			for (const a of arquivos) svc.conferirArquivo(codigo, turmaId, a.nome, a.bytes, topico.trim());
 			const adicionados = arquivos.map((a) => svc.adicionarArquivo(codigo, turmaId, a.nome, a.bytes, topico.trim()));
 			return Response.json({ adicionados, sugestoes: [], custoUsd: null });
 		}

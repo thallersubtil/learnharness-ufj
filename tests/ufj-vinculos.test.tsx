@@ -94,15 +94,19 @@ describe("vínculos de sessão", () => {
 
 	it("chat de material/revisão não marca aula feita; chat de tópico marca", () => {
 		const sessao = (over: Partial<ChatSummary>): ChatSummary => ({ id: "x", title: "t", createdAt: "2026-11-20T00:00:00.000Z", updatedAt: "2026-11-20T00:00:00.000Z", kind: "teach", phase: "teach", hasActiveProblem: false, concludedProblems: 0, ...over }) as ChatSummary;
-		const sinais = core.sinaisPorTopico([
+		const lista = [
 			sessao({ id: "a", ufj: { materia: "ICE0001", turma: TURMA, avaliacao: "sigaa-999", topico: "limites" } }),
 			sessao({ id: "b", ufj: { materia: "ICE0001", turma: TURMA, topico: "regra-da-cadeia", origem: "material", arquivo: "regra.pdf" } }),
-			sessao({ id: "c", ufj: { materia: "ICE0001", turma: TURMA, avaliacao: "sigaa-999", origem: "prova" } }),
-		], { materia: "ICE0001" });
+			sessao({ id: "c", createdAt: "2026-11-21T00:00:00.000Z", ufj: { materia: "ICE0001", turma: TURMA, avaliacao: "sigaa-999", origem: "prova" } }),
+			sessao({ id: "d", createdAt: "2026-11-22T00:00:00.000Z", ufj: { materia: "ICE0001", turma: TURMA, avaliacao: "sigaa-999", origem: "prova" } }),
+			sessao({ id: "e", ufj: { materia: "ICE0001", turma: TURMA, avaliacao: "sigaa-998", origem: "prova" } }),
+		];
+		const sinais = core.sinaisPorTopico(lista, { materia: "ICE0001" });
 		assert.equal(sinais.get("limites")!.aulaFeita, true);
 		assert.equal(sinais.get("regra-da-cadeia")!.aulaFeita, false);
 		assert.deepEqual(sinais.get("regra-da-cadeia")!.sessoes.map((s) => [s.id, s.rotulo]), [["b", "Material"]]);
-		assert.equal(sinais.has("c"), false);
+		assert.equal([...sinais.values()].some((s) => s.sessoes.some((x) => x.id === "c")), false, "a revisão da prova não entra em tópico nenhum");
+		assert.deepEqual(core.revisoesDaProva(lista, { materia: "ICE0001", avaliacao: "sigaa-999" }).map((s) => [s.id, s.rotulo]), [["d", "Revisão"], ["c", "Revisão"]], "as revisões ficam na prova, da mais recente");
 	});
 
 	it("cartão sem avaliação mostra só matéria e material", () => {

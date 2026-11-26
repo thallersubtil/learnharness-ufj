@@ -4,6 +4,7 @@ import { arquivoGetRoute } from "@/src/server";
 export const dynamic = "force-dynamic";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ codigo: string; turma: string; nome: string }> }) {
+	// O Next já entrega os parâmetros decodificados; decodificar de novo quebra nomes com "%".
 	const { codigo, turma, nome } = await params;
-	return arquivoGetRoute(decodeURIComponent(codigo), decodeURIComponent(turma), decodeURIComponent(nome));
+	return arquivoGetRoute(codigo, turma, nome);
 }

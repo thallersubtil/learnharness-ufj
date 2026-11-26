@@ -43,12 +43,15 @@ describe("telas enxutas", () => {
 			materia: { codigo: "ICE0001", nome: "Disciplina Teste" }, turma: { id: "t", semestre: "2026-2", docente: "" },
 			avaliacao: { id: "p", nome: "2ª unidade", tipo: "prova-escrita", data: "2026-09-10", escopo: { topicos: ["a", "b"] } },
 			dias: 5, horas: null, criteriosMedia: "", topicos: [topico("a", 2), topico("b", 1)], passos: [], avisos: [],
-			revisao: { ufjContext: { materia: "ICE0001", turma: "t", avaliacao: "p", origem: "prova" }, prompt: "x" },
+			revisao: { ufjContext: { materia: "ICE0001", turma: "t", avaliacao: "p", origem: "prova" }, prompt: "x" }, revisoes: [],
 		};
 		const html = renderToStaticMarkup(<PreparacaoTela view={view} ocupado={false} onAprender={noop} onPraticar={noop} onHoras={noop} />);
 		assert.match(html, /04\/09 · 2 materiais/);
 		assert.match(html, /04\/09 · 1 material</);
 		assert.doesNotMatch(html, /Aula 4|material\(is\)/);
+		assert.doesNotMatch(html, /data-revisoes/, "sem revisão, nada aparece");
+		const comRevisao = renderToStaticMarkup(<PreparacaoTela view={{ ...view, revisoes: [{ id: "r1", title: "Quero revisar para a 2ª unidade", kind: "teach", rotulo: "Revisão" }] }} ocupado={false} onAprender={noop} onPraticar={noop} onHoras={noop} />);
+		assert.match(comRevisao, /data-revisoes[^>]*>[\s\S]*href="\/chat\/r1"[^>]*>Revisão: Quero revisar para a 2ª unidade</);
 	});
 
 	it("a Conta UFJ mostra no máximo 5 avisos e 'e mais N'", () => {

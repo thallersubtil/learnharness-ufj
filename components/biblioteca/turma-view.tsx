@@ -121,6 +121,7 @@ export function TurmaScreen({ codigo, turmaId }: { codigo: string; turmaId: stri
 	const starter = useRef(new SessionStarter());
 	const [ocupado, setOcupado] = useState(false);
 	const materiais: AcoesMateriais = {
+		ocupado,
 		onEstudar: (arquivo) => {
 			if (!dados || ocupado) return;
 			const ref = dados.referencias.arquivos.find((a) => a.arquivo === arquivo);
@@ -138,10 +139,12 @@ export function TurmaScreen({ codigo, turmaId }: { codigo: string; turmaId: stri
 			form.append("arquivos", file);
 			form.append("topico", topicoId);
 			setErro(null);
+			setOcupado(true);
 			fetch(`${url}/materiais`, { method: "POST", body: form })
 				.then((res) => lerResposta(res))
 				.then(() => carregar())
-				.catch((e: Error) => setErro(e.message));
+				.catch((e: Error) => setErro(e.message))
+				.finally(() => setOcupado(false));
 		},
 	};
 	const acoes: AcoesProvas = {

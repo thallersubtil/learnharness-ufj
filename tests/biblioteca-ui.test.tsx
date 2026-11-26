@@ -90,7 +90,7 @@ describe("PreparacaoTela", () => {
 		dias: 20, horas: 6, criteriosMedia: "M=(N1+N2+N3)/3",
 		topicos: [topico("a", { aulaFeita: true, sessoes: [{ id: "s1", title: "Aula de A", kind: "teach", rotulo: "Aula" }] }), topico("b", { aulaFeita: true, praticado: true }), topico("c")],
 		passos: [{ tipo: "aprender", topico: "c", texto: "Aprender: C" }, { tipo: "praticar", topico: "a", texto: "Praticar: A" }],
-		revisao: { ufjContext: { materia: "ICE0001", turma: "2026-2-prof-exemplo", avaliacao: "N3", origem: "prova" }, prompt: "Quero revisar para a N3 — Avaliação escrita de Cálculo Teste (08/12)." },
+		revisao: { ufjContext: { materia: "ICE0001", turma: "2026-2-prof-exemplo", avaliacao: "N3", origem: "prova" }, prompt: "Quero revisar para a N3 — Avaliação escrita de Cálculo Teste (08/12)." }, revisoes: [],
 		avisos: [],
 	};
 

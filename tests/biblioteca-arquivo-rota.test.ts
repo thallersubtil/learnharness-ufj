@@ -21,6 +21,7 @@ bibliotecaStore.writeTurma("ICE0001", { ...turmaValida(), aulas: [{ ordem: 1, ro
 const pdf = bibliotecaStore.addReferenciaFile("ICE0001", TURMA, "aula.pdf", new TextEncoder().encode("%PDF-1.4 teste"));
 const docx = bibliotecaStore.addReferenciaFile("ICE0001", TURMA, "ficha.docx", new TextEncoder().encode("PK ficha"));
 const md = bibliotecaStore.addReferenciaFile("ICE0001", TURMA, "Exemplos.ipynb.md", new TextEncoder().encode("# Exemplos\n"));
+const nb = bibliotecaStore.addReferenciaFile("ICE0001", TURMA, "Caderno.ipynb", new TextEncoder().encode("{}"));
 
 const svc = server.createBibliotecaService({ biblioteca: bibliotecaStore, topicosEmSessoes: () => [] });
 const rota = (nome: string) => server.arquivoGetRoute("ICE0001", TURMA, nome, svc);
@@ -35,10 +36,12 @@ describe("rota do arquivo", () => {
 		assert.equal(new TextDecoder().decode(await res.arrayBuffer()), "%PDF-1.4 teste");
 	});
 
-	it("texto e markdown saem como text/plain inline", async () => {
-		const res = await rota(md.arquivo);
-		assert.equal(res.headers.get("content-type"), "text/plain; charset=utf-8");
-		assert.match(res.headers.get("content-disposition") ?? "", /^inline/);
+	it("texto, markdown e caderno saem como text/plain inline (a mesma tabela da tela)", async () => {
+		for (const nome of [md.arquivo, nb.arquivo]) {
+			const res = await rota(nome);
+			assert.equal(res.headers.get("content-type"), "text/plain; charset=utf-8", nome);
+			assert.match(res.headers.get("content-disposition") ?? "", /^inline/, nome);
+		}
 	});
 
 	it(".docx vai como anexo", async () => {
@@ -69,6 +72,16 @@ describe("envio de arquivo extra com tópico", () => {
 		assert.throws(() => svc.adicionarArquivo("ICE0001", TURMA, "x.txt", new Uint8Array([1]), "nao-existe"), /Tópico desconhecido\./);
 		assert.throws(() => svc.adicionarArquivo("ICE0001", TURMA, "x.txt", new Uint8Array([1]), "antigo"), /Tópico desconhecido\./);
 		assert.throws(() => svc.adicionarArquivo("ICE0001", TURMA, "x.exe", new Uint8Array([1]), "limites"), /Tipo de arquivo não aceito/);
+	});
+
+	it("num envio com vários arquivos, um recusado impede todos: nada fica gravado pela metade", async () => {
+		const form = new FormData();
+		form.append("arquivos", new File(["ok"], "primeiro.md", { type: "text/markdown" }));
+		form.append("arquivos", new File(["x"], "segundo.exe", { type: "application/octet-stream" }));
+		form.append("topico", "limites");
+		const res = await server.materiaisPostRoute(new Request("http://localhost/x", { method: "POST", body: form }), "ICE0001", TURMA, svc);
+		assert.equal(res.status, 400);
+		assert.equal(bibliotecaStore.readReferencias("ICE0001", TURMA).arquivos.some((a) => a.arquivo === "primeiro.md"), false);
 	});
 
 	it("o POST multipart com `topico` usa o caminho sem IA", async () => {

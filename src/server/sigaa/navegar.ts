@@ -131,14 +131,24 @@ async function lerTurma(sessao: SigaaSessao, portal: Pagina, t: TurmaNoPortal, o
 	const secNoticias = await abrirSecao(sessao, principal, menu, "Notícias");
 	const noticias: Noticia[] = [];
 	for (const n of secNoticias ? lerNoticias(secNoticias.html) : []) {
+		if (opcoes.parar?.()) throw new SigaaCanceladaError();
 		const { link, ...resto } = n;
 		if (opcoes.noticiaConhecida?.(cab, n.sigaaId)) {
 			noticias.push(resto);
 			continue;
 		}
 		// Notícia nova: abre uma vez para guardar o texto (a partir da página da lista).
-		const aberta = checarSessao(await clicar(sessao, secNoticias!, link));
-		noticias.push({ ...resto, texto: lerTextoDaNoticia(aberta.html) });
+		// Se a página não vier (erro, visão expirada), a notícia entra sem texto, vira um
+		// aviso e é tentada de novo na próxima sincronização; a turma segue normalmente.
+		let texto: string | null = null;
+		try {
+			const aberta = checarSessao(await clicar(sessao, secNoticias!, link));
+			texto = aberta.status < 400 ? lerTextoDaNoticia(aberta.html) : null;
+		} catch (err) {
+			if (err instanceof SigaaSessaoExpiradaError || err instanceof SigaaCanceladaError) throw err;
+		}
+		if (texto === null) avisos.push(`Não consegui ler a notícia "${n.titulo}".`);
+		noticias.push(texto === null ? resto : { ...resto, texto });
 	}
 	let secArquivos = await abrirSecao(sessao, principal, menu, "Arquivos");
 	const lista: ArquivoNaLista[] = secArquivos ? lerArquivos(secArquivos.html) : [];

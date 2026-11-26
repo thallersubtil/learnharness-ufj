@@ -12,8 +12,11 @@ export function lerTarefas(html: string): Tarefa[] {
 	const doc = documento(html);
 	const out: Tarefa[] = [];
 	const linhas = Array.from(doc.querySelectorAll("table.listing > tbody > tr"));
+	// A linha de título tem células com rowspan (período, nota, envios); a de instruções, não.
+	const ehTitulo = (tr: Element) => !!tr.querySelector("td[rowspan]");
 	for (let i = 0; i < linhas.length; i++) {
 		const tr = linhas[i]!;
+		if (!ehTitulo(tr)) continue;
 		const titulo = limpo(tr.querySelector("td.first")?.textContent);
 		const periodo = PERIODO.exec(limpo(tr.textContent));
 		if (!titulo || !periodo) continue;
@@ -25,7 +28,7 @@ export function lerTarefas(html: string): Tarefa[] {
 		if (periodo[5] && periodo[6]) t.hora = `${periodo[5]}:${periodo[6]}`;
 		// A linha seguinte traz as instruções (sem o link de anexo) e o anexo.
 		const seguinte = linhas[i + 1];
-		if (seguinte && !PERIODO.test(limpo(seguinte.textContent))) {
+		if (seguinte && !ehTitulo(seguinte)) {
 			const celula = seguinte.querySelector("td");
 			const anexo = Array.from(celula?.querySelectorAll("a") ?? []).find((a) => /baixar/i.test(a.textContent ?? "") || /verProducao/.test(a.getAttribute("href") ?? ""));
 			t.temArquivo = !!anexo;

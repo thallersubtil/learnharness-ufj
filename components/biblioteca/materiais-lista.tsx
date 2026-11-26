@@ -15,6 +15,8 @@ import { Button } from "@/components/ui/button";
 export interface AcoesMateriais {
 	onEstudar(arquivo: string): void;
 	onAdicionar(file: File, topicoId: string): void;
+	/** Enquanto um chat é aberto ou um arquivo é enviado: os botões ficam desligados. */
+	ocupado?: boolean;
 }
 
 export const rotaDoArquivo = (codigo: string, turmaId: string, arquivo: string) =>
@@ -22,7 +24,7 @@ export const rotaDoArquivo = (codigo: string, turmaId: string, arquivo: string) 
 export const paginaDoArquivo = (codigo: string, turmaId: string, arquivo: string) =>
 	`/biblioteca/${encodeURIComponent(codigo)}/${encodeURIComponent(turmaId)}/arquivo/${encodeURIComponent(arquivo)}`;
 
-export function MateriaisLista({ codigo, turmaId, turma, referencias, onEstudar, onAdicionar, topicosAtivos }: {
+export function MateriaisLista({ codigo, turmaId, turma, referencias, onEstudar, onAdicionar, ocupado = false, topicosAtivos }: {
 	codigo: string;
 	turmaId: string;
 	turma: Turma;
@@ -32,6 +34,8 @@ export function MateriaisLista({ codigo, turmaId, turma, referencias, onEstudar,
 } & AcoesMateriais) {
 	const [arquivo, setArquivo] = useState<File | null>(null);
 	const [topico, setTopico] = useState("");
+	// Muda a cada envio para remontar o <input type=file> (não há como limpá-lo pelo estado).
+	const [envio, setEnvio] = useState(0);
 
 	// Grupos por aula (ordem), do mais recente ao mais antigo; "Sem tópico" por último.
 	const porAula = new Map<number | null, Referencias["arquivos"]>();
@@ -52,6 +56,7 @@ export function MateriaisLista({ codigo, turmaId, turma, referencias, onEstudar,
 		if (!arquivo || !topico) return;
 		onAdicionar(arquivo, topico);
 		setArquivo(null);
+		setEnvio((n) => n + 1);
 	}
 
 	const linha = (r: Referencias["arquivos"][number]) => {
@@ -62,7 +67,7 @@ export function MateriaisLista({ codigo, turmaId, turma, referencias, onEstudar,
 				{c.abre ? (
 					<>
 						<Link href={paginaDoArquivo(codigo, turmaId, r.arquivo)} className="rounded-md border px-2 py-0.5 hover:bg-accent">Abrir</Link>
-						<Button type="button" size="sm" variant="outline" onClick={() => onEstudar(r.arquivo)}>Estudar com a IA</Button>
+						<Button type="button" size="sm" variant="outline" disabled={ocupado} onClick={() => onEstudar(r.arquivo)}>Estudar com a IA</Button>
 					</>
 				) : (
 					<a href={rotaDoArquivo(codigo, turmaId, r.arquivo)} download className="rounded-md border px-2 py-0.5 hover:bg-accent">Baixar</a>
@@ -89,12 +94,12 @@ export function MateriaisLista({ codigo, turmaId, turma, referencias, onEstudar,
 			)}
 			{referencias.arquivos.length === 0 && <p className="text-sm text-muted-foreground">Nenhum material ainda.</p>}
 			<form className="flex flex-wrap items-center gap-2 pt-1" onSubmit={enviar}>
-				<input type="file" aria-label="Arquivo extra" accept=".pdf,.ipynb,.md,.txt,.c,.h,.py,.java,.png,.jpg,.jpeg" onChange={(e) => setArquivo(e.target.files?.[0] ?? null)} className="text-sm" />
+				<input key={envio} type="file" aria-label="Arquivo extra" accept=".pdf,.ipynb,.md,.txt,.c,.h,.py,.java,.png,.jpg,.jpeg" onChange={(e) => setArquivo(e.target.files?.[0] ?? null)} className="text-sm" />
 				<select aria-label="Tópico do arquivo" value={topico} onChange={(e) => setTopico(e.target.value)} className="rounded-md border bg-background px-2 py-1 text-sm">
 					<option value="">Tópico…</option>
 					{opcoes.map((t) => <option key={t.id} value={t.id}>{t.titulo}</option>)}
 				</select>
-				<Button type="submit" size="sm" variant="outline" disabled={!arquivo || !topico}>Adicionar arquivo</Button>
+				<Button type="submit" size="sm" variant="outline" disabled={!arquivo || !topico || ocupado}>Adicionar arquivo</Button>
 			</form>
 		</div>
 	);

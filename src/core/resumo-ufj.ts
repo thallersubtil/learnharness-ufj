@@ -19,9 +19,9 @@ export interface TurmaDaMateria {
 	turma: Turma;
 }
 
-/** Dias à frente que o resumo cobre, e o teto de linhas. */
+/** Dias à frente que o resumo cobre, e o teto de compromissos (provas + tarefas) listados. */
 export const RESUMO_DIAS = 21;
-export const RESUMO_LINHAS = 12;
+export const RESUMO_COMPROMISSOS = 12;
 
 export const RODAPE_RESUMO = "Para tópicos, arquivos do professor, instruções de tarefas e avisos, use a ferramenta `ufj`. Leia os arquivos pelo caminho que ela devolve.";
 
@@ -50,32 +50,39 @@ interface Compromisso {
 	texto: string;
 }
 
-/** Os compromissos até `dias` à frente; sem nenhum, o próximo futuro de cada matéria. */
+const porData = (a: Compromisso, b: Compromisso) => a.data.localeCompare(b.data) || (a.hora ?? "").localeCompare(b.hora ?? "");
+
+/** Por matéria: os compromissos até `RESUMO_DIAS` à frente; a matéria sem nenhum nesse prazo entra com o próximo futuro dela. */
 function proximos(porMateria: Compromisso[][], hoje: Date): Compromisso[] {
-	const futuros = porMateria.map((lista) => lista.filter((c) => diasAte(c.data, hoje) >= 0).sort((a, b) => a.data.localeCompare(b.data) || (a.hora ?? "").localeCompare(b.hora ?? "")));
-	const noPrazo = futuros.flat().filter((c) => diasAte(c.data, hoje) <= RESUMO_DIAS);
-	const lista = noPrazo.length > 0 ? noPrazo : futuros.flatMap((f) => (f[0] ? [f[0]] : []));
-	return lista.sort((a, b) => a.data.localeCompare(b.data) || (a.hora ?? "").localeCompare(b.hora ?? ""));
+	const lista = porMateria.flatMap((itens) => {
+		const futuros = itens.filter((c) => diasAte(c.data, hoje) >= 0).sort(porData);
+		const noPrazo = futuros.filter((c) => diasAte(c.data, hoje) <= RESUMO_DIAS);
+		return noPrazo.length > 0 ? noPrazo : futuros.slice(0, 1);
+	});
+	return lista.sort(porData);
 }
 
 const linhaDe = (c: Compromisso, hoje: Date) => `${formatarDataCurta(c.data)}${c.hora ? ` ${c.hora}` : ""} ${c.texto} (${emDias(diasAte(c.data, hoje))})`;
 
-export function composeResumoUfj(entradas: TurmaDaMateria[], hoje: Date): string {
+/** O bloco do system prompt. `rodape: false` tira a última linha (para quem não tem a ferramenta `ufj`, como a conversa lateral). */
+export function composeResumoUfj(entradas: TurmaDaMateria[], hoje: Date, opcoes: { rodape?: boolean } = {}): string {
 	const { visiveis } = turmasVisiveis(entradas);
 	if (visiveis.length === 0) return "";
 	const linhas = [`[Semestre UFJ — ${formatarData(dataLocal(hoje))}]`];
 	linhas.push(`Matérias: ${visiveis.map((e) => `${e.materia.codigo} ${e.materia.nome} (${e.turma.semestre})`).join("; ")}.`);
+	// Teto de compromissos: as provas primeiro, as tarefas com o que sobrar.
 	const provas = proximos(
 		visiveis.map((e) => e.turma.avaliacoes.filter((a) => PROVAS.has(a.tipo) && a.data).map((a) => ({ data: a.data!, texto: `${e.materia.nome} — ${a.nome}` }))),
 		hoje,
-	);
+	).slice(0, RESUMO_COMPROMISSOS);
 	if (provas.length) linhas.push(`Próximas provas: ${provas.map((c) => linhaDe(c, hoje)).join("; ")}.`);
 	const tarefas = proximos(
 		visiveis.map((e) => (e.turma.tarefas ?? []).filter((t) => t.fim).map((t) => ({ data: t.fim!, ...(t.hora ? { hora: t.hora } : {}), texto: `${e.materia.nome} — ${t.titulo}` }))),
 		hoje,
-	);
+	).slice(0, RESUMO_COMPROMISSOS - provas.length);
 	if (tarefas.length) linhas.push(`Próximas tarefas: ${tarefas.map((c) => linhaDe(c, hoje)).join("; ")}.`);
-	return [...linhas.slice(0, RESUMO_LINHAS - 1), RODAPE_RESUMO].join("\n");
+	if (opcoes.rodape !== false) linhas.push(RODAPE_RESUMO);
+	return linhas.join("\n");
 }
 
 /** "AAAA-MM-DD" da data local. */
@@ -95,7 +102,7 @@ function linhaMateria(e: TurmaDaMateria, marca = ""): string {
 export function textoMaterias(entradas: TurmaDaMateria[]): string {
 	const { visiveis, outras } = turmasVisiveis(entradas);
 	if (visiveis.length === 0) return "Nenhuma matéria sincronizada ainda.";
-	return [...visiveis.map((e) => linhaMateria(e)), ...outras.map((e) => linhaMateria(e, " (plano importado)"))].join("\n");
+	return [...visiveis.map((e) => linhaMateria(e)), ...outras.map((e) => linhaMateria(e, e.turma.sigaa ? " (SIGAA, outro semestre)" : " (plano importado)"))].join("\n");
 }
 
 /** Tópicos, provas, tarefas, notícias e arquivos de uma turma, com os caminhos. */

@@ -60,12 +60,27 @@ describe("resumo do semestre", () => {
 		assert.equal(textoMaterias([]), "Nenhuma matéria sincronizada ainda.");
 	});
 
-	it("sem prova nos 21 dias, mostra a próxima futura de cada matéria; passadas ficam de fora", () => {
+	it("matéria sem prova nos 21 dias entra com a próxima futura dela, mesmo quando outra matéria tem prova no prazo; passadas ficam de fora", () => {
 		const c = calculo();
 		c.turma.avaliacoes[0]!.data = "2027-01-15";
-		const r = composeResumoUfj([c], HOJE);
-		assert.match(r, /Próximas provas: 15\/01 Cálculo Teste — 2ª unidade \(em 51 dias\)\./);
+		assert.match(composeResumoUfj([c], HOJE), /Próximas provas: 15\/01 Cálculo Teste — 2ª unidade \(em 51 dias\)\./);
+		const r = composeResumoUfj([c, disciplina2()], HOJE);
+		assert.match(r, /Próximas provas: 27\/11 Disciplina Teste II — 3ª prova \(em 2 dias\); 15\/01 Cálculo Teste — 2ª unidade \(em 51 dias\)\./);
 		assert.doesNotMatch(r, /3ª unidade/);
+	});
+
+	it("sem rodapé para quem não tem a ferramenta (conversa lateral)", () => {
+		const r = composeResumoUfj([calculo()], HOJE, { rodape: false });
+		assert.doesNotMatch(r, /ferramenta `ufj`/);
+		assert.match(r, /Próximas tarefas: [^\n]*\.$/);
+	});
+
+	it("segunda turma do SIGAA, de outro semestre, é marcada como tal e não como plano importado", () => {
+		const atual = calculo();
+		const antiga: TurmaDaMateria = { materia: atual.materia, turma: { ...atual.turma, id: "2025-2-turma-ta", semestre: "2025-2", revisadoEm: "2025-12-01T00:00:00.000Z" } };
+		const lista = textoMaterias([antiga, atual]);
+		assert.match(lista, /\(2025-2[^\n]*\(SIGAA, outro semestre\)/);
+		assert.doesNotMatch(lista, /plano importado/);
 	});
 
 	it("turma de plano e turma do SIGAA: a do SIGAA aparece; a outra só em materias com a marca", () => {
@@ -81,14 +96,19 @@ describe("resumo do semestre", () => {
 		assert.match(lista, /\(plano importado\)/);
 	});
 
-	it("corta em 12 linhas", () => {
+	it("corta em 12 compromissos: as provas primeiro, as tarefas com o que sobrar", () => {
 		const muitas: TurmaDaMateria[] = Array.from({ length: 15 }, (_, i) => {
 			const c = calculo();
 			c.materia = { ...c.materia, codigo: `ICE00${String(i).padStart(2, "0")}`, nome: `Matéria ${i}` };
-			c.turma = { ...c.turma, tarefas: [], avaliacoes: [{ ...c.turma.avaliacoes[0]!, data: `2026-12-${String(1 + i).padStart(2, "0")}` }] };
+			c.turma = { ...c.turma, avaliacoes: [{ ...c.turma.avaliacoes[0]!, data: `2026-12-${String(1 + i).padStart(2, "0")}` }] };
 			return c;
 		});
-		assert.ok(composeResumoUfj(muitas, HOJE).split("\n").length <= 12);
+		const r = composeResumoUfj(muitas, HOJE);
+		assert.equal((r.match(/— 2ª unidade/g) ?? []).length, 12, "12 provas, da mais próxima");
+		assert.match(r, /Matéria 11 — 2ª unidade/);
+		assert.doesNotMatch(r, /Matéria 12 — 2ª unidade|Próximas tarefas/, "as tarefas não cabem");
+		const poucas = muitas.slice(0, 10);
+		assert.equal((composeResumoUfj(poucas, HOJE).match(/Lista 3/g) ?? []).length, 2, "sobram 2 vagas para tarefas");
 	});
 
 	it("textoMateria lista tópicos, provas, tarefas, notícias e arquivos com caminho; textoNoticia devolve o texto", () => {

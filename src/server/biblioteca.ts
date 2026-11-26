@@ -18,6 +18,7 @@ import {
 	type Turma,
 } from "../core/biblioteca.ts";
 import { arquivarRemovidos, topicosReferenciados } from "../core/biblioteca-escopo.ts";
+import { tipoDeMaterial } from "../core/materiais.ts";
 import { adicionarProva as adicionarProvaNaTurma, definirDataProva, definirEscopoProva, removerProva, renomearProva } from "../core/provas.ts";
 import type { BibliotecaStore } from "../core/ports.ts";
 import { MAX_IMPORT_BYTES } from "../../lib/notes-import-limits.ts";
@@ -145,7 +146,8 @@ export function createBibliotecaService(deps: BibliotecaServiceDeps) {
 		},
 
 		/** Um arquivo extra do aluno, já ligado a um tópico de aula, sem passar pelo modelo. */
-		adicionarArquivo(codigo: string, turmaId: string, nome: string, bytes: Uint8Array, topicoId: string): { arquivo: string; reutilizado: boolean } {
+		/** As checagens de `adicionarArquivo` sem gravar nada: num envio com vários arquivos, todos são conferidos antes do primeiro ser gravado. */
+		conferirArquivo(codigo: string, turmaId: string, nome: string, bytes: Uint8Array, topicoId: string): { materia: Materia; turma: Turma } {
 			const materia = biblioteca.readMateria(codigo);
 			const turma = materia ? biblioteca.readTurma(codigo, turmaId) : null;
 			if (!materia || !turma) throw new BibliotecaNaoEncontradaError("Turma não encontrada.");
@@ -153,6 +155,11 @@ export function createBibliotecaService(deps: BibliotecaServiceDeps) {
 			if (!(EXTENSOES_MATERIAIS as readonly string[]).includes(ext)) throw new BibliotecaEntradaError(`Tipo de arquivo não aceito: ${nome}`);
 			if (bytes.byteLength > MAX_IMPORT_BYTES) throw new BibliotecaEnvioGrandeError();
 			if (!materia.topicos.some((t) => t.id === topicoId && !t.arquivado)) throw new BibliotecaEntradaError("Tópico desconhecido.");
+			return { materia, turma };
+		},
+
+		adicionarArquivo(codigo: string, turmaId: string, nome: string, bytes: Uint8Array, topicoId: string): { arquivo: string; reutilizado: boolean } {
+			const { turma } = this.conferirArquivo(codigo, turmaId, nome, bytes, topicoId);
 			const r = biblioteca.addReferenciaFile(codigo, turmaId, nome, bytes);
 			const refs = biblioteca.readReferencias(codigo, turmaId);
 			const aula = turma.aulas.filter((a) => a.topicos.includes(topicoId)).sort((x, y) => x.ordem - y.ordem)[0];
@@ -288,9 +295,10 @@ export type BibliotecaService = ReturnType<typeof createBibliotecaService>;
 export function tipoDoArquivo(nome: string): { tipo: string; inline: boolean } {
 	const ext = nome.includes(".") ? nome.slice(nome.lastIndexOf(".")).toLowerCase() : "";
 	if (ext === ".pdf") return { tipo: "application/pdf", inline: true };
-	if ([".md", ".txt", ".c", ".h", ".py", ".java"].includes(ext)) return { tipo: "text/plain; charset=utf-8", inline: true };
 	if (ext === ".png") return { tipo: "image/png", inline: true };
 	if (ext === ".jpg" || ext === ".jpeg") return { tipo: "image/jpeg", inline: true };
+	// A mesma tabela da tela (core/materiais.ts): o que ela abre como texto sai como texto.
+	if (tipoDeMaterial(nome).tipo === "texto") return { tipo: "text/plain; charset=utf-8", inline: true };
 	return { tipo: "application/octet-stream", inline: false };
 }
 

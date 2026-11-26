@@ -48,7 +48,7 @@ describe("resumo no prompt", () => {
 
 	it("o fragmento de contexto UFJ explica o bloco e a ferramenta", () => {
 		const prompt = createTeacherAgent(undefined, { engine: engine() }).state.systemPrompt;
-		assert.match(prompt, /Todo chat começa com um bloco "\[Semestre UFJ\]"/);
+		assert.match(prompt, /terminam com um bloco "\[Semestre UFJ\]"/);
 		assert.match(prompt, /Nunca diga que não há material sem ter consultado\./);
 	});
 
@@ -58,5 +58,7 @@ describe("resumo no prompt", () => {
 		bibliotecaStore.writeTurma("ICE0001", turmaValida());
 		const r = resumoUfj(new Date(2026, 10, 25));
 		assert.match(r, /^\[Semestre UFJ — 25\/11\/2026\]\nMatérias: ICE0001 Disciplina Teste \(2026-2\)\./);
+		assert.match(r, /ferramenta `ufj`/);
+		assert.doesNotMatch(resumoUfj(new Date(2026, 10, 25), { rodape: false }), /ferramenta `ufj`/, "a conversa lateral recebe o resumo sem o rodapé");
 	});
 });

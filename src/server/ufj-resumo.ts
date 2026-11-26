@@ -10,9 +10,9 @@ export function turmasDaBiblioteca(): TurmaDaMateria[] {
 	return materias.flatMap((materia) => stores.bibliotecaStore.listTurmas(materia.codigo).map((turma) => ({ materia, turma })));
 }
 
-export function resumoUfj(hoje = new Date()): string {
+export function resumoUfj(hoje = new Date(), opcoes: { rodape?: boolean } = {}): string {
 	try {
-		return composeResumoUfj(turmasDaBiblioteca(), hoje);
+		return composeResumoUfj(turmasDaBiblioteca(), hoje, opcoes);
 	} catch {
 		return "";
 	}

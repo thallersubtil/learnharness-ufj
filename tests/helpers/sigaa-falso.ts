@@ -23,6 +23,8 @@ export interface OpcoesSigaaFalso {
 	derrubarSessaoDepois?: number;
 	/** Seção de uma turma cuja página responde 500. */
 	secaoQuebrada?: { idTurma: string; rotulo: string };
+	/** Id de uma notícia cujo "Visualizar" responde 500. */
+	noticiaQuebrada?: string;
 	/** Cada página de Arquivos só aceita um download (como uma visão JSF que expira). */
 	umDownloadPorPagina?: boolean;
 	/** Senha errada cai numa página sem formulário de login nem mensagem de erro. */
@@ -303,6 +305,10 @@ function tratarTurma(c: ContextoTurma): boolean {
 		const n = NOTICIAS_FALSAS[form.get("id") ?? ""];
 		if (!c.viewStateValido() || !n) {
 			c.html(paginas.principal);
+			return true;
+		}
+		if (opcoes.noticiaQuebrada === form.get("id")) {
+			c.html("aviso.html", {}, 500);
 			return true;
 		}
 		c.noticiasAbertas.push(form.get("id")!);

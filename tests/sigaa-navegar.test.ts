@@ -104,6 +104,21 @@ describe("navegar pelo SIGAA", () => {
 		assert.deepEqual(f.noticiasAbertas, ["8001"], "só a desconhecida foi aberta");
 	});
 
+	it("uma notícia que não abre não derruba a turma: fica sem texto e vira aviso", async () => {
+		const f = await iniciarSigaaFalso({ noticiaQuebrada: "8001" });
+		abertos.push(f);
+		const sessao = new SigaaSessao({ base: f.base, esperarMs: 0 });
+		const portal = await entrar(sessao, "aluno.teste", "segredo");
+		const lidas: SigaaTurmaLida[] = [];
+		const leitura = await lerSigaa(sessao, portal, { jaBaixado: () => true, noticiaConhecida: () => false, aoLerTurma: (l) => lidas.push(l) });
+		const a = lidas[0]!;
+		assert.equal(a.tarefas.length, 2, "a turma inteira foi lida");
+		assert.deepEqual(a.noticias.map((n) => [n.sigaaId, n.texto]), [["8001", undefined], ["8002", "Não haverá aula hoje."]]);
+		assert.deepEqual(f.noticiasAbertas, ["8002"]);
+		assert.deepEqual(leitura.falhas.map((x) => [x.idTurma, x.erro]), [["1001", 'Não consegui ler a notícia "Revisão na sexta".']]);
+		assert.equal(leitura.turmasLidas, 2);
+	});
+
 	it("progresso passa por tarefas e notícias", async () => {
 		const f = await iniciarSigaaFalso();
 		abertos.push(f);
