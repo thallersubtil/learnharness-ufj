@@ -5,7 +5,7 @@ interface SessionCreation {
 	kind?: "practice";
 	graphContext?: { propositions: readonly { id: string; name: string; statement: string }[] };
 	/** UFJ library link (spec Etapa A §7.6): the server writes the ufj-context marker. */
-	ufjContext?: { materia: string; turma: string; avaliacao: string; topico?: string };
+	ufjContext?: { materia: string; turma: string; avaliacao?: string; topico?: string; origem?: "topico" | "material" | "prova"; arquivo?: string };
 	/** Fill the new session's composer with this text WITHOUT sending it. */
 	prefill?: string;
 }

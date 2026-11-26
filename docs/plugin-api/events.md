@@ -52,6 +52,7 @@ export interface ServerEvents {
     "chats-changed": Record<string, never>;
     "sources-changed": Record<string, never>;
     "biblioteca-changed": Record<string, never>;
+    "sigaa-changed": Record<string, never>;
     "subscriptions-changed": Record<string, never>;
     "record-changed": {
         chatId: string;
@@ -84,6 +85,7 @@ export interface ServerEvents {
 - ["chats-changed"](#serverevents-chats-changed)
 - ["sources-changed"](#serverevents-sources-changed)
 - ["biblioteca-changed"](#serverevents-biblioteca-changed)
+- ["sigaa-changed"](#serverevents-sigaa-changed)
 - ["subscriptions-changed"](#serverevents-subscriptions-changed)
 - ["record-changed"](#serverevents-record-changed)
 - ["record-changed".chatId](#serverevents-record-changedchatid)
@@ -179,6 +181,14 @@ A biblioteca UFJ mudou (matéria, turma ou materiais gravados).
 
 ```ts
 "biblioteca-changed": Record<string, never>;
+```
+
+### ServerEvents "sigaa-changed"
+
+A conta UFJ ou o estado da sincronização com o SIGAA mudou. Sem dados da conta no barramento.
+
+```ts
+"sigaa-changed": Record<string, never>;
 ```
 
 ### ServerEvents "subscriptions-changed"

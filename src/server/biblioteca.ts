@@ -10,12 +10,16 @@ import {
 	BibliotecaConflitoError,
 	BibliotecaEntradaError,
 	BibliotecaNaoEncontradaError,
+	isValidNomeArquivo,
 	parseMateria,
 	parseTurma,
 	type Materia,
+	type Referencias,
 	type Turma,
 } from "../core/biblioteca.ts";
 import { arquivarRemovidos, topicosReferenciados } from "../core/biblioteca-escopo.ts";
+import { tipoDeMaterial } from "../core/materiais.ts";
+import { adicionarProva as adicionarProvaNaTurma, definirDataProva, definirEscopoProva, removerProva, renomearProva } from "../core/provas.ts";
 import type { BibliotecaStore } from "../core/ports.ts";
 import { MAX_IMPORT_BYTES } from "../../lib/notes-import-limits.ts";
 import { stores } from "./stores.ts";
@@ -132,6 +136,40 @@ export function createBibliotecaService(deps: BibliotecaServiceDeps) {
 			return { adicionados, sugestoes, custoUsd };
 		},
 
+		/** O arquivo da turma para ser aberto dentro do app (spec chat+SIGAA §5.5). */
+		abrirArquivo(codigo: string, turmaId: string, nome: string): { caminho: string; tipo: string; inline: boolean } {
+			if (!isValidNomeArquivo(nome)) throw new BibliotecaEntradaError(`Nome de arquivo inválido: "${nome}".`);
+			if (!biblioteca.readMateria(codigo) || !biblioteca.readTurma(codigo, turmaId)) throw new BibliotecaNaoEncontradaError("Turma não encontrada.");
+			if (!biblioteca.listReferenciaFiles(codigo, turmaId).includes(nome)) throw new BibliotecaNaoEncontradaError("Arquivo não encontrado.");
+			const { tipo, inline } = tipoDoArquivo(nome);
+			return { caminho: biblioteca.referenciaPath(codigo, turmaId, nome), tipo, inline };
+		},
+
+		/** Um arquivo extra do aluno, já ligado a um tópico de aula, sem passar pelo modelo. */
+		/** As checagens de `adicionarArquivo` sem gravar nada: num envio com vários arquivos, todos são conferidos antes do primeiro ser gravado. */
+		conferirArquivo(codigo: string, turmaId: string, nome: string, bytes: Uint8Array, topicoId: string): { materia: Materia; turma: Turma } {
+			const materia = biblioteca.readMateria(codigo);
+			const turma = materia ? biblioteca.readTurma(codigo, turmaId) : null;
+			if (!materia || !turma) throw new BibliotecaNaoEncontradaError("Turma não encontrada.");
+			const ext = nome.includes(".") ? nome.slice(nome.lastIndexOf(".")).toLowerCase() : "";
+			if (!(EXTENSOES_MATERIAIS as readonly string[]).includes(ext)) throw new BibliotecaEntradaError(`Tipo de arquivo não aceito: ${nome}`);
+			if (bytes.byteLength > MAX_IMPORT_BYTES) throw new BibliotecaEnvioGrandeError();
+			if (!materia.topicos.some((t) => t.id === topicoId && !t.arquivado)) throw new BibliotecaEntradaError("Tópico desconhecido.");
+			return { materia, turma };
+		},
+
+		adicionarArquivo(codigo: string, turmaId: string, nome: string, bytes: Uint8Array, topicoId: string): { arquivo: string; reutilizado: boolean } {
+			const { turma } = this.conferirArquivo(codigo, turmaId, nome, bytes, topicoId);
+			const r = biblioteca.addReferenciaFile(codigo, turmaId, nome, bytes);
+			const refs = biblioteca.readReferencias(codigo, turmaId);
+			const aula = turma.aulas.filter((a) => a.topicos.includes(topicoId)).sort((x, y) => x.ordem - y.ordem)[0];
+			const entrada: Referencias["arquivos"][number] = { arquivo: r.arquivo, sha256: r.sha256, titulo: r.arquivo, topicos: [topicoId], ...(aula ? { aula: aula.ordem } : {}) };
+			const i = refs.arquivos.findIndex((a) => a.arquivo === r.arquivo);
+			const arquivos = i < 0 ? [...refs.arquivos, entrada] : refs.arquivos.map((a, k) => (k === i ? { ...a, topicos: a.topicos.includes(topicoId) ? a.topicos : [...a.topicos, topicoId], ...(a.aula === undefined && aula ? { aula: aula.ordem } : {}) } : a));
+			biblioteca.writeReferencias(codigo, turmaId, { formato: 1, arquivos });
+			return { arquivo: r.arquivo, reutilizado: r.reutilizado };
+		},
+
 		/** Grava o mapeamento revisado arquivo → tópicos (substitui o referencias.json inteiro). */
 		salvarReferencias(codigo: string, turmaId: string, mapa: unknown) {
 			const materia = biblioteca.readMateria(codigo);
@@ -140,6 +178,8 @@ export function createBibliotecaService(deps: BibliotecaServiceDeps) {
 			if (!Array.isArray(lista)) throw new BibliotecaEntradaError("Envie a lista de arquivos com seus tópicos.");
 			const conhecidos = new Set(materia.topicos.map((t) => t.id));
 			const ativos = new Set(materia.topicos.filter((t) => !t.arquivado).map((t) => t.id));
+			// O que o SIGAA sabe de cada arquivo (id, aula, título) não vem do formulário: fica.
+			const antes = new Map(biblioteca.readReferencias(codigo, turmaId).arquivos.map((a) => [a.arquivo, a]));
 			const arquivos = lista.map((x) => {
 				const e = x as { arquivo?: unknown; titulo?: unknown; topicos?: unknown };
 				if (typeof e?.arquivo !== "string") throw new BibliotecaEntradaError("Cada item precisa do nome do arquivo.");
@@ -148,8 +188,12 @@ export function createBibliotecaService(deps: BibliotecaServiceDeps) {
 				const topicos = Array.isArray(e.topicos) ? e.topicos : [];
 				for (const id of topicos) if (typeof id !== "string" || !conhecidos.has(id)) throw new BibliotecaEntradaError(`O tópico "${String(id)}" não está na matéria.`);
 				// Tópicos arquivados saem do mapeamento em vez de travar o salvamento.
-				const entrada: { arquivo: string; titulo?: string; topicos: string[]; sha256: string } = { arquivo: e.arquivo, topicos: (topicos as string[]).filter((id) => ativos.has(id)), sha256 };
+				const anterior = antes.get(e.arquivo);
+				const entrada: Referencias["arquivos"][number] = { arquivo: e.arquivo, topicos: (topicos as string[]).filter((id) => ativos.has(id)), sha256 };
 				if (typeof e.titulo === "string" && e.titulo.trim()) entrada.titulo = e.titulo.trim();
+				else if (anterior?.titulo) entrada.titulo = anterior.titulo;
+				if (anterior?.sigaaId) entrada.sigaaId = anterior.sigaaId;
+				if (anterior?.aula !== undefined) entrada.aula = anterior.aula;
 				return entrada;
 			});
 			biblioteca.writeReferencias(codigo, turmaId, { formato: 1, arquivos });
@@ -192,10 +236,71 @@ export function createBibliotecaService(deps: BibliotecaServiceDeps) {
 			biblioteca.writeTurma(codigo, limpa);
 			return limpa;
 		},
+
+		/** Mudar a data de uma prova com um clique (spec SIGAA §7.5); `null` apaga. */
+		definirData(codigo: string, turmaId: string, avaliacaoId: string, data: string | null): Turma {
+			const { turma } = turmaExistente(codigo, turmaId);
+			const nova = definirDataProva(turma, avaliacaoId, data);
+			biblioteca.writeTurma(codigo, nova);
+			return nova;
+		},
+
+		/** Uma prova criada pelo aluno. */
+		adicionarProva(codigo: string, turmaId: string, entrada: { nome: string; data?: string }): Turma {
+			const { turma } = turmaExistente(codigo, turmaId);
+			const nova = adicionarProvaNaTurma(turma, entrada);
+			biblioteca.writeTurma(codigo, nova);
+			return nova;
+		},
+
+		/** Renomeia uma prova criada à mão. */
+		renomearProva(codigo: string, turmaId: string, avaliacaoId: string, nome: string): Turma {
+			const { turma } = turmaExistente(codigo, turmaId);
+			const nova = renomearProva(turma, avaliacaoId, nome);
+			biblioteca.writeTurma(codigo, nova);
+			return nova;
+		},
+
+		/** Apaga uma prova criada à mão. */
+		removerProva(codigo: string, turmaId: string, avaliacaoId: string): Turma {
+			const { turma } = turmaExistente(codigo, turmaId);
+			const nova = removerProva(turma, avaliacaoId);
+			biblioteca.writeTurma(codigo, nova);
+			return nova;
+		},
+
+		/** O que o aluno quer que caia na prova (só tópicos ativos da matéria). */
+		definirEscopo(codigo: string, turmaId: string, avaliacaoId: string, topicos: string[]): Turma {
+			const { materia, turma } = turmaExistente(codigo, turmaId);
+			for (const id of topicos) if (!materia.topicos.some((t) => t.id === id)) throw new BibliotecaEntradaError(`Tópico desconhecido: "${id}".`);
+			// Tópicos arquivados saem da escolha em vez de travar o salvamento.
+			const ativos = topicos.filter((id) => materia.topicos.some((t) => t.id === id && !t.arquivado));
+			const nova = definirEscopoProva(turma, avaliacaoId, ativos);
+			biblioteca.writeTurma(codigo, nova);
+			return nova;
+		},
 	};
+
+	function turmaExistente(codigo: string, turmaId: string): { materia: Materia; turma: Turma } {
+		const materia = biblioteca.readMateria(codigo);
+		const turma = materia ? biblioteca.readTurma(codigo, turmaId) : null;
+		if (!materia || !turma) throw new BibliotecaNaoEncontradaError("Turma não encontrada.");
+		return { materia, turma };
+	}
 }
 
 export type BibliotecaService = ReturnType<typeof createBibliotecaService>;
+
+/** O tipo HTTP de um arquivo da turma e se o navegador o abre (inline) ou só baixa. */
+export function tipoDoArquivo(nome: string): { tipo: string; inline: boolean } {
+	const ext = nome.includes(".") ? nome.slice(nome.lastIndexOf(".")).toLowerCase() : "";
+	if (ext === ".pdf") return { tipo: "application/pdf", inline: true };
+	if (ext === ".png") return { tipo: "image/png", inline: true };
+	if (ext === ".jpg" || ext === ".jpeg") return { tipo: "image/jpeg", inline: true };
+	// A mesma tabela da tela (core/materiais.ts): o que ela abre como texto sai como texto.
+	if (tipoDeMaterial(nome).tipo === "texto") return { tipo: "text/plain; charset=utf-8", inline: true };
+	return { tipo: "application/octet-stream", inline: false };
+}
 
 /** A instância de produção: os tópicos citados por sessões vêm do marcador ufj-context. */
 export const bibliotecaService: BibliotecaService = createBibliotecaService({

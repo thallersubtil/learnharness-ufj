@@ -38,6 +38,7 @@ import {
 	type Turma,
 } from "../core/biblioteca.ts";
 import { computeEscopos, computePosicoes, reconcileTopicos } from "../core/biblioteca-escopo.ts";
+import { EXTENSOES_LIDAS_PELA_IA } from "../core/sigaa.ts";
 import { callCost } from "./pricing.ts";
 import { providerKeyPresent } from "./keys.ts";
 import { refreshConnectionCatalog } from "./model-catalog.ts";
@@ -137,7 +138,8 @@ const SugestoesSchema = Type.Object({
 });
 
 /** Extensões aceitas como material de turma (spec Etapa A §7.4). */
-export const EXTENSOES_MATERIAIS = [".pdf", ".ipynb", ".md", ".txt", ".c", ".h", ".py", ".java", ".png", ".jpg", ".jpeg"] as const;
+/** Os formatos aceitos no envio de materiais: os mesmos que a IA lê (spec SIGAA §7.8). */
+export const EXTENSOES_MATERIAIS = EXTENSOES_LIDAS_PELA_IA;
 
 const LIMITE_TRECHO = 2000;
 

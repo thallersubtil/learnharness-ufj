@@ -6,6 +6,7 @@
  * rotas com a mensagem de erro em português.
  */
 
+import Link from "next/link";
 import type { ReactNode } from "react";
 import { TopBar } from "@/components/top-bar";
 
@@ -32,6 +33,11 @@ export function BibliotecaPagina({ titulo, acoes, children }: { titulo: string; 
 	);
 }
 
+/** O link de volta para a tela Matérias (antiga Biblioteca). */
+export function VoltarParaMaterias() {
+	return <Link href="/biblioteca" className="text-sm text-muted-foreground hover:underline">Matérias</Link>;
+}
+
 export function Aviso({ children, tom = "aviso" }: { children: ReactNode; tom?: "aviso" | "erro" }) {
 	return (
 		<p role={tom === "erro" ? "alert" : "status"} className={tom === "erro" ? "rounded-md border border-destructive/40 px-3 py-2 text-sm text-destructive" : "rounded-md border border-dashed border-border px-3 py-2 text-sm text-muted-foreground"}>
@@ -51,6 +57,17 @@ export function Secao({ titulo, children, acoes }: { titulo: string; children: R
 			{children}
 		</section>
 	);
+}
+
+/** Uma fila de mudanças: cada uma só começa quando a anterior termina (com sucesso ou erro),
+ *  para que dois salvamentos seguidos nunca cheguem fora de ordem ao servidor. */
+export function criarFila() {
+	let ultima: Promise<unknown> = Promise.resolve();
+	return function enfileirar<T>(tarefa: () => Promise<T>): Promise<T> {
+		const proxima = ultima.then(tarefa, tarefa);
+		ultima = proxima.catch(() => {});
+		return proxima;
+	};
 }
 
 /** Lê a resposta de uma rota da biblioteca; erro vira Error com a mensagem da rota. */

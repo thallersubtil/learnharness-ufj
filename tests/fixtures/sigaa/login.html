@@ -1,0 +1,25 @@
+<!-- Página de exemplo (estrutura do SIGAA da UFJ, texto inventado). {{MENSAGEM}} e {{ACAO}} são trocados pelo SIGAA falso. -->
+<html>
+<head><meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1"><title>SIGAA - Sistema Integrado de Gestão de Atividades Acadêmicas</title></head>
+<body>
+<div id="conteudo">
+	<div class="logon">
+		<h3>Entrar no Sistema</h3>
+		{{MENSAGEM}}
+		<form name="loginForm" method="post" action="{{ACAO}}">
+			<input type="hidden" name="width" value="0" id="width">
+			<input type="hidden" name="height" value="0" id="height">
+			<input type="hidden" name="urlRedirect" value="" />
+			<input type="hidden" name="subsistemaRedirect" value="" />
+			<input type="hidden" name="acao" value="" />
+			<input type="hidden" name="acessibilidade" value="">
+			<table>
+				<tr><th>Usuário:</th><td align="left"> <input type="text" name="user.login" size="20" value=""></td></tr>
+				<tr><th>Senha:</th><td> <input type="password" name="user.senha" size="20" value=""> </td></tr>
+				<tr><td colspan="2"><input type="submit" value="Entrar"></td></tr>
+			</table>
+		</form>
+	</div>
+</div>
+</body>
+</html>

@@ -19,6 +19,7 @@ import { jobTools, type DemoInput, type PdfInput, type ResearchInput, type Visua
 import { planTools, type PlanToolContext } from "./tools/plan.ts";
 import { probeDoneTool, type ProbeDoneContext } from "./tools/probe.ts";
 import { proberGraphTools } from "./tools/graph.ts";
+import { ufjTool, type UfjToolDeps } from "./tools/ufj.ts";
 import { readTool } from "./tools/read.ts";
 import { lsTool } from "./tools/ls.ts";
 import { findTool } from "./tools/find.ts";
@@ -277,6 +278,8 @@ export interface ProberToolContext extends ProbeDoneContext {
 	 *  master switch AND the agent.graphTools toggle (settings-resolution).
 	 *  Absent = the gate is closed, no map tools (tests drive this seam). */
 	graphStore?: GraphStore;
+	/** UFJ (spec chat+SIGAA §5.3): presente = a ferramenta `ufj` é registrada. */
+	ufj?: UfjToolDeps;
 }
 
 /** The prober's tool set: probe quiz (no nodeId) + ask + the learner-fs
@@ -340,6 +343,7 @@ export function createProberTools(
 				...(ctx.graphStore
 					? proberGraphTools({ chatStore: ctx.chatStore, graphStore: ctx.graphStore })
 					: {}),
+				...(ctx.ufj ? { ufj: ufjTool(ctx.ufj) } : {}),
 				...done,
 			},
 				withoutMechanics(enabled),
@@ -401,6 +405,8 @@ export interface TeacherToolContext extends PlanToolContext {
 	spawn: (job: JobRecord, input: ResearchInput | DemoInput | VisualInput | PdfInput) => void;
 	/** Retained search-status seam; research dispatch is available keylessly. */
 	searchAvailable?: () => boolean;
+	/** UFJ (spec chat+SIGAA §5.3): presente = a ferramenta `ufj` é registrada. */
+	ufj?: UfjToolDeps;
 }
 
 /**
@@ -463,6 +469,7 @@ export function createTeacherTools(
 			show_image: createShowImageTool(ctx),
 			...planTools(ctx),
 			...jobTools({ chatId: ctx.chatId, jobStore: ctx.jobStore, spawn: ctx.spawn, searchAvailable: ctx.searchAvailable }),
+			...(ctx.ufj ? { ufj: ufjTool(ctx.ufj) } : {}),
 		},
 		withoutMechanics(enabled),
 		),

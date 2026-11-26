@@ -41,13 +41,15 @@ function readSource(file: string): string {
 
 /** The side model's system prompt, composed fresh per call (an override
  *  switched on between questions lands on the next one). */
-export function composeSideChatInstructions(switches: Record<string, boolean> = {}): string {
+/** `extra`: o resumo do semestre UFJ (spec chat+SIGAA §5.2), anexado ao fim quando não vazio. */
+export function composeSideChatInstructions(switches: Record<string, boolean> = {}, extra = ""): string {
 	const segments = [readSource(SIDE_BASE)];
 	for (const key of SIDE_SHARED_FRAGMENTS) {
 		const override = switches[key] === true ? readPromptOverride(key) : null;
 		segments.push(override ?? readSource(path.join(PROMPTS_DIR, ...key.split("/"))));
 	}
 	segments.push(readSource(SIDE_STYLE));
+	if (extra.trim()) segments.push(extra);
 	return segments
 		.map((s) => s.trim())
 		.filter(Boolean)

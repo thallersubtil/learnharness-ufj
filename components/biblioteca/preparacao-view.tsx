@@ -14,14 +14,19 @@ import { formatarData, formatarDataCurta, type Passo, type PreparacaoView, type 
 import { SessionStarter } from "@/components/start-session";
 import { useServerEvent } from "@/components/server-events";
 import { Button } from "@/components/ui/button";
+import { DataEditavel } from "./data-editavel";
 import { Input } from "@/components/ui/input";
 import { Aviso, BibliotecaPagina, Secao, lerResposta, textoDias } from "./comum";
 
-export function PreparacaoTela({ view, onAprender, onPraticar, onHoras, ocupado = false }: {
+export function PreparacaoTela({ view, onAprender, onPraticar, onHoras, onData, onRevisar, ocupado = false }: {
 	view: PreparacaoView;
 	onAprender: (t: TopicoPreparacao) => void;
 	onPraticar: (t: TopicoPreparacao) => void;
 	onHoras: (horas: number | null) => void;
+	/** Mudar a data da prova daqui mesmo (spec SIGAA §7.5). */
+	onData?: (data: string | null) => void;
+	/** Abrir um chat de revisão da prova inteira (spec chat+SIGAA §5.4). */
+	onRevisar?: () => void;
 	ocupado?: boolean;
 }) {
 	const [horas, setHoras] = useState(view.horas === null ? "" : String(view.horas).replace(".", ","));
@@ -40,15 +45,26 @@ export function PreparacaoTela({ view, onAprender, onPraticar, onHoras, ocupado 
 			<div className="rounded-lg border px-4 py-3">
 				<div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
 					<span className="font-title text-xl">{avaliacao.nome}</span>
-					{avaliacao.data && <span className="text-sm">{formatarData(avaliacao.data)}</span>}
+					{onData ? <DataEditavel data={avaliacao.data} origem={avaliacao.origemData} onSalvar={onData} /> : avaliacao.data && <span className="text-sm">{formatarData(avaliacao.data)}</span>}
 					<span className="text-sm font-medium">{textoDias(view.dias)}</span>
+					<span className="flex-1" />
+					{onRevisar && <Button type="button" size="sm" disabled={ocupado} onClick={onRevisar}>Revisar para a prova</Button>}
 				</div>
 				<p className="mt-1 text-sm text-muted-foreground">
-					{view.materia.nome} · {view.turma.docente}
+					{view.materia.nome}{view.turma.docente ? ` · ${view.turma.docente}` : ""}
 					{avaliacao.pontos !== undefined && ` · ${String(avaliacao.pontos).replace(".", ",")} pontos`}
 					{avaliacao.duracaoMin !== undefined && ` · ${avaliacao.duracaoMin} min`}
 				</p>
 				{(avaliacao.peso || view.criteriosMedia) && <p className="mt-1 text-xs text-muted-foreground">{avaliacao.peso ?? view.criteriosMedia}</p>}
+				{view.revisoes.length > 0 && (
+					<p data-revisoes className="mt-2 flex flex-wrap gap-x-3 text-xs">
+						{view.revisoes.map((s) => (
+							<Link key={s.id} href={`/chat/${encodeURIComponent(s.id)}`} className="text-muted-foreground underline">
+								{s.rotulo}: {s.title}
+							</Link>
+						))}
+					</p>
+				)}
 				<label className="mt-3 flex flex-wrap items-center gap-2 text-sm">
 					<span>Quanto tempo você tem para estudar para esta prova?</span>
 					<Input className="w-24" inputMode="decimal" aria-label="Horas disponíveis" value={horas} onChange={(e) => setHoras(e.target.value)} onBlur={salvarHoras} onKeyDown={(e) => { if (e.key === "Enter") salvarHoras(); }} />
@@ -86,14 +102,14 @@ export function PreparacaoTela({ view, onAprender, onPraticar, onHoras, ocupado 
 								<Button type="button" size="sm" variant="outline" disabled={ocupado} onClick={() => onPraticar(t)}>Praticar</Button>
 							</div>
 							<p className="mt-1 text-xs text-muted-foreground">
-								{t.aulas.map((a) => `Aula ${a.rotulo}${a.data ? ` (${formatarDataCurta(a.data)})` : ""}`).join(" · ")}
-								{t.referencias > 0 && ` · ${t.referencias} material(is)`}
+								{t.aulas.map((a) => (a.data ? formatarDataCurta(a.data) : `Aula ${a.rotulo}`)).join(", ")}
+								{t.referencias > 0 && ` · ${t.referencias} ${t.referencias === 1 ? "material" : "materiais"}`}
 							</p>
 							{t.sessoes.length > 0 && (
 								<p className="mt-1 flex flex-wrap gap-x-3 text-xs">
 									{t.sessoes.map((s) => (
 										<Link key={s.id} href={`/chat/${encodeURIComponent(s.id)}`} className="text-muted-foreground underline">
-											{s.kind === "practice" ? "Prática" : "Aula"}: {s.title}
+											{s.rotulo}: {s.title}
 										</Link>
 									))}
 								</p>
@@ -104,6 +120,11 @@ export function PreparacaoTela({ view, onAprender, onPraticar, onHoras, ocupado 
 			</Secao>
 		</div>
 	);
+}
+
+/** "Preparação · 2ª unidade": o nome da prova, nunca o id interno ("sigaa-7001"). */
+export function tituloPreparacao(view: PreparacaoView | null): string {
+	return view ? `Preparação · ${view.avaliacao.nome}` : "Preparação";
 }
 
 export function PreparacaoScreen({ codigo, turmaId, avaliacaoId }: { codigo: string; turmaId: string; avaliacaoId: string }) {
@@ -124,15 +145,31 @@ export function PreparacaoScreen({ codigo, turmaId, avaliacaoId }: { codigo: str
 	useServerEvent("chats-changed", carregar);
 
 	async function abrir(t: TopicoPreparacao, kind: "teach" | "practice") {
+		await iniciar({ title: kind === "teach" ? t.promptAprender : t.promptPraticar, ...(kind === "practice" ? { kind: "practice" as const } : {}), ufjContext: t.ufjContext, prefill: kind === "teach" ? t.promptAprender : t.promptPraticar });
+	}
+
+	async function iniciar(body: Parameters<SessionStarter["start"]>[0]) {
 		setOcupado(true);
 		setErro(null);
 		try {
-			const prompt = kind === "teach" ? t.promptAprender : t.promptPraticar;
-			const destino = await starter.current.start({ title: prompt, ...(kind === "practice" ? { kind: "practice" as const } : {}), ufjContext: t.ufjContext, prefill: prompt }, fetch);
+			const destino = await starter.current.start(body, fetch);
 			router.push(destino);
 		} catch (e) {
 			setErro((e as Error).message);
 			setOcupado(false);
+		}
+	}
+
+	async function data(valor: string | null) {
+		try {
+			await lerResposta(await fetch(`/api/biblioteca/materias/${encodeURIComponent(codigo)}/turmas/${encodeURIComponent(turmaId)}/avaliacoes/${encodeURIComponent(avaliacaoId)}`, {
+				method: "PUT",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ data: valor }),
+			}));
+			carregar();
+		} catch (e) {
+			setErro((e as Error).message);
 		}
 	}
 
@@ -151,12 +188,12 @@ export function PreparacaoScreen({ codigo, turmaId, avaliacaoId }: { codigo: str
 
 	return (
 		<BibliotecaPagina
-			titulo={view ? `Preparação · ${view.avaliacao.id}` : "Preparação"}
+			titulo={tituloPreparacao(view)}
 			acoes={<Link href={`/biblioteca/${encodeURIComponent(codigo)}/${encodeURIComponent(turmaId)}`} className="text-sm text-muted-foreground hover:underline">{view?.materia.nome ?? "Turma"}</Link>}
 		>
 			{erro && <Aviso tom="erro">{erro}</Aviso>}
 			{!view && !erro && <p className="text-sm text-muted-foreground">Carregando…</p>}
-			{view && <PreparacaoTela key={`${view.avaliacao.id}:${view.horas}`} view={view} ocupado={ocupado} onAprender={(t) => void abrir(t, "teach")} onPraticar={(t) => void abrir(t, "practice")} onHoras={(h) => void horas(h)} />}
+			{view && <PreparacaoTela key={`${view.avaliacao.id}:${view.horas}`} view={view} ocupado={ocupado} onAprender={(t) => void abrir(t, "teach")} onPraticar={(t) => void abrir(t, "practice")} onHoras={(h) => void horas(h)} onData={(d) => void data(d)} onRevisar={() => void iniciar({ title: view.revisao.prompt, ufjContext: view.revisao.ufjContext, prefill: view.revisao.prompt })} />}
 		</BibliotecaPagina>
 	);
 }

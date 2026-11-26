@@ -18,6 +18,7 @@ import { piEngineForSpec, type PiEngine } from "../agent/models.ts";
 import { isSubscriptionProvider } from "../agent/subscription-connections.ts";
 import { usageWasAdmitted } from "../agent/subscription-request-cycle.ts";
 import { composeSideChatInstructions, streamSideAnswer } from "../agent/side-chat.ts";
+import { resumoUfj } from "./ufj-resumo.ts";
 import { effectiveSettings, stores } from "./stores.ts";
 import { providerKeyPresent } from "./keys.ts";
 import { refreshConnectionCatalog } from "./model-catalog.ts";
@@ -279,5 +280,6 @@ async function productionEngineFor(record: ChatRecord): Promise<SideEngine | Res
 interface SideChatGlobal { __lhSideChatService?: SideChatService }
 export const sideChats: SideChatService = ((globalThis as typeof globalThis & SideChatGlobal).__lhSideChatService ??= createSideChatService({
 	chatStore: stores.chatStore, engineFor: productionEngineFor, beforeAsk: awaitCompaction,
-	instructions: () => composeSideChatInstructions(effectiveSettings().agent.prompts),
+	// Sem o rodapé: a conversa lateral não tem a ferramenta `ufj`, então não deve ser mandada a usá-la.
+	instructions: () => composeSideChatInstructions(effectiveSettings().agent.prompts, resumoUfj(new Date(), { rodape: false })),
 }));

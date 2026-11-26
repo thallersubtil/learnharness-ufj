@@ -8,40 +8,37 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { UploadIcon } from "lucide-react";
-import { TIPOS_COM_ESCOPO, diasAte, formatarData, type Materia, type Turma } from "@/src/core";
+import { TIPOS_COM_ESCOPO, diasAte, formatarData, type EstadoSigaa, type Materia, type Turma } from "@/src/core";
 import { useServerEvent } from "@/components/server-events";
+import { CartaoSigaa, useEstadoSigaa } from "@/components/sigaa/conta-ufj";
 import { Aviso, BibliotecaPagina, lerResposta, textoDias } from "./comum";
 
 const COM_PREPARACAO = new Set<string>(TIPOS_COM_ESCOPO);
 
-export function BibliotecaHome({ materias, problemas, hoje }: { materias: { materia: Materia; turmas: Turma[] }[]; problemas: string[]; hoje: Date }) {
+export function BibliotecaHome({ materias, problemas, hoje, sigaa, onSincronizar }: {
+	materias: { materia: Materia; turmas: Turma[] }[];
+	problemas: string[];
+	hoje: Date;
+	sigaa?: EstadoSigaa;
+	onSincronizar?: () => void;
+}) {
 	return (
 		<div className="space-y-6">
-			<div className="flex items-center gap-3">
-				<p className="flex-1 text-sm text-muted-foreground">Planos de ensino, materiais e a preparação de cada prova.</p>
-				<Link href="/biblioteca/importar" className="inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm hover:bg-accent">
-					<UploadIcon className="size-4" />
-					Importar plano de ensino
-				</Link>
-			</div>
+			{sigaa && <CartaoSigaa estado={sigaa} onSincronizar={onSincronizar} />}
 			{problemas.map((p) => <Aviso key={p}>{p}</Aviso>)}
 			{materias.length === 0 ? (
-				<Aviso>Sua biblioteca está vazia. Comece importando o plano de ensino de uma matéria.</Aviso>
+				<Aviso>Nenhuma matéria ainda. Conecte sua conta UFJ ou importe um plano de ensino.</Aviso>
 			) : (
 				materias.map(({ materia, turmas }) => (
 					<div key={materia.codigo} className="rounded-lg border px-4 py-3">
-						<div className="flex items-baseline gap-2">
-							<h2 className="font-title text-xl">{materia.nome}</h2>
-							<span className="text-xs text-muted-foreground">{materia.codigo}</span>
-						</div>
+						<h2 className="font-title text-xl">{materia.nome}</h2>
 						{turmas.map((turma) => {
 							const provas = turma.avaliacoes.filter((a) => COM_PREPARACAO.has(a.tipo));
 							const base = `/biblioteca/${encodeURIComponent(materia.codigo)}/${encodeURIComponent(turma.id)}`;
 							return (
 								<div key={turma.id} className="mt-3">
 									<Link href={base} className="text-sm hover:underline">
-										{turma.semestre} · {turma.docente.nome}
+										{turma.semestre}{turma.docente.nome ? ` · ${turma.docente.nome}` : ""}
 									</Link>
 									<ul className="mt-1 space-y-1">
 										{provas.map((av) => {
@@ -56,7 +53,7 @@ export function BibliotecaHome({ materias, problemas, hoje }: { materias: { mate
 												</li>
 											);
 										})}
-										{provas.length === 0 && <li className="px-2 text-xs text-muted-foreground">Nenhuma prova no plano.</li>}
+										{provas.length === 0 && <li className="px-2 text-xs text-muted-foreground">{turma.sigaa ? "Nenhuma prova com data ainda." : "Nenhuma prova no plano."}</li>}
 									</ul>
 								</div>
 							);
@@ -64,6 +61,7 @@ export function BibliotecaHome({ materias, problemas, hoje }: { materias: { mate
 					</div>
 				))
 			)}
+			<p className="text-xs text-muted-foreground"><Link href="/biblioteca/importar" className="hover:underline">Importar plano de ensino</Link></p>
 		</div>
 	);
 }
@@ -79,10 +77,11 @@ export function BibliotecaHomeScreen() {
 	}, []);
 	useEffect(carregar, [carregar]);
 	useServerEvent("biblioteca-changed", carregar);
+	const sigaa = useEstadoSigaa();
 	return (
-		<BibliotecaPagina titulo="Biblioteca UFJ">
+		<BibliotecaPagina titulo="Matérias">
 			{erro && <Aviso tom="erro">{erro}</Aviso>}
-			{dados ? <BibliotecaHome materias={dados.materias} problemas={dados.problemas} hoje={new Date()} /> : !erro && <p className="text-sm text-muted-foreground">Carregando…</p>}
+			{dados ? <BibliotecaHome materias={dados.materias} problemas={dados.problemas} hoje={new Date()} sigaa={sigaa.estado ?? undefined} onSincronizar={() => void sigaa.sincronizar()} /> : !erro && <p className="text-sm text-muted-foreground">Carregando…</p>}
 		</BibliotecaPagina>
 	);
 }

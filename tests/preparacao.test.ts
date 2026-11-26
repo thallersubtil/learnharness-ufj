@@ -115,6 +115,16 @@ describe("preparacaoView", () => {
 		assert.deepEqual(view.avisos, []);
 	});
 
+	it("a view traz o vínculo e o prompt da revisão da prova inteira (spec chat+SIGAA §5.4)", () => {
+		const view = server.preparacaoView(ref, hoje);
+		assert.deepEqual(view.revisao.ufjContext, { materia: "ICE0001", turma: ref.turma, avaliacao: "N3", origem: "prova" });
+		assert.equal(view.revisao.prompt, "Quero revisar para a N3 — Avaliação escrita de Cálculo Teste (08/12).");
+		assert.deepEqual(view.revisoes, []);
+		const chat = { id: "r1", title: "Quero revisar para a N3", createdAt: "2026-11-18T09:00:00.000Z", updatedAt: "2026-11-18T09:00:00.000Z", kind: "teach", phase: "teach", hasActiveProblem: false, concludedProblems: 0, ufj: { materia: "ICE0001", turma: ref.turma, avaliacao: "N3", origem: "prova" } } as unknown as ChatSummary;
+		const com = server.preparacaoView(ref, hoje, { biblioteca: server.stores.bibliotecaStore, estudo: server.stores.estudoStore, listChats: () => [chat], readNodes: () => [] });
+		assert.deepEqual(com.revisoes.map((s) => [s.id, s.rotulo]), [["r1", "Revisão"]]);
+	});
+
 	it("avaliação sem escopo gera aviso; id desconhecido lança", () => {
 		const v = server.preparacaoView({ ...ref, avaliacao: "TF" }, hoje);
 		assert.deepEqual(v.avisos, ["Esta avaliação está sem escopo. Edite o plano para escolher os tópicos."]);

@@ -27,7 +27,7 @@ const turmaComN2 = () => ({
 describe("BibliotecaHome", () => {
 	it("vazia mostra o convite para importar", () => {
 		const html = renderToStaticMarkup(<BibliotecaHome materias={[]} problemas={[]} hoje={new Date(2026, 10, 18)} />);
-		assert.match(html, /Sua biblioteca está vazia\. Comece importando o plano de ensino de uma matéria\./);
+		assert.match(html, /Nenhuma matéria ainda\. Conecte sua conta UFJ ou importe um plano de ensino\./);
 		assert.match(html, /href="\/biblioteca\/importar"/);
 		assert.match(html, /Importar plano de ensino/);
 	});
@@ -88,8 +88,9 @@ describe("PreparacaoTela", () => {
 		turma: { id: "2026-2-prof-exemplo", semestre: "2026-2", docente: "Prof. Exemplo" },
 		avaliacao: { id: "N3", nome: "N3 — Avaliação escrita", tipo: "prova-escrita", data: "2026-12-08", pontos: 10, escopo: { topicos: [] } },
 		dias: 20, horas: 6, criteriosMedia: "M=(N1+N2+N3)/3",
-		topicos: [topico("a", { aulaFeita: true, sessoes: [{ id: "s1", title: "Aula de A", kind: "teach" }] }), topico("b", { aulaFeita: true, praticado: true }), topico("c")],
+		topicos: [topico("a", { aulaFeita: true, sessoes: [{ id: "s1", title: "Aula de A", kind: "teach", rotulo: "Aula" }] }), topico("b", { aulaFeita: true, praticado: true }), topico("c")],
 		passos: [{ tipo: "aprender", topico: "c", texto: "Aprender: C" }, { tipo: "praticar", topico: "a", texto: "Praticar: A" }],
+		revisao: { ufjContext: { materia: "ICE0001", turma: "2026-2-prof-exemplo", avaliacao: "N3", origem: "prova" }, prompt: "Quero revisar para a N3 — Avaliação escrita de Cálculo Teste (08/12)." }, revisoes: [],
 		avisos: [],
 	};
 
@@ -124,9 +125,9 @@ describe("UfjContextCard", () => {
 });
 
 describe("barra lateral", () => {
-	it("o botão Biblioteca aparece", () => {
+	it("o botão Matérias aparece", () => {
 		const html = renderToStaticMarkup(<BibliotecaNavButton active={false} onClick={noop} />);
-		assert.match(html, /Biblioteca/);
+		assert.match(html, /Matérias/);
 		assert.match(html, /data-testid="nav-biblioteca"/);
 	});
 });

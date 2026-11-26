@@ -1,0 +1,341 @@
+/**
+ * Um SIGAA falso para os testes (spec SIGAA §7.10): um servidor HTTP local que
+ * serve as páginas de exemplo de `tests/fixtures/sigaa/` em ISO-8859-1, como o
+ * SIGAA da UFJ, e confere o que um cliente real precisa acertar: o cookie
+ * JSESSIONID, o formulário de login, o javax.faces.ViewState e os parâmetros
+ * dos comandos JSF. Nada aqui acessa a rede de verdade.
+ */
+
+import fs from "node:fs";
+import http from "node:http";
+import type { AddressInfo } from "node:net";
+import path from "node:path";
+import { randomBytes } from "node:crypto";
+
+const PASTA = path.join(import.meta.dirname, "..", "fixtures", "sigaa");
+
+export interface OpcoesSigaaFalso {
+	usuario?: string;
+	senhaCerta?: string;
+	/** Depois do login, o SIGAA para na página de aviso (Avaliação Institucional). */
+	avisoDepoisDoLogin?: boolean;
+	/** Depois de N páginas internas, a sessão cai (o SIGAA volta para a tela de login). */
+	derrubarSessaoDepois?: number;
+	/** Seção de uma turma cuja página responde 500. */
+	secaoQuebrada?: { idTurma: string; rotulo: string };
+	/** Id de uma notícia cujo "Visualizar" responde 500. */
+	noticiaQuebrada?: string;
+	/** Cada página de Arquivos só aceita um download (como uma visão JSF que expira). */
+	umDownloadPorPagina?: boolean;
+	/** Senha errada cai numa página sem formulário de login nem mensagem de erro. */
+	recusaSilenciosa?: boolean;
+	/** O portal vem sem a lista de turmas. */
+	portalSemTurmas?: boolean;
+	/** A página principal desta turma vem sem nenhum tópico de aula. */
+	semTopicos?: string;
+	/** O arquivo 5001 tem 27 MiB (acima do limite antigo de 26 MiB). */
+	arquivoGrande?: boolean;
+	/** Como o SIGAA real: o download responde 301 para um servidor de arquivos separado. */
+	arquivosEmOutroHost?: boolean;
+	/** Porta fixa (só para o script de desenvolvimento); sem ela, uma porta livre. */
+	porta?: number;
+	/** Chamado antes de servir cada página interna (caminho e, para seções, o rótulo). */
+	aoServir?: (caminho: string, rotulo?: string) => void;
+}
+
+export interface PedidoRecebido {
+	metodo: string;
+	caminho: string;
+	corpo: string;
+}
+
+export interface SigaaFalso {
+	base: string;
+	pedidos: PedidoRecebido[];
+	/** Com `arquivosEmOutroHost`: a origem do servidor de arquivos e o que ele recebeu. */
+	origemArquivos?: string;
+	pedidosArquivos: { caminho: string; cookie: string | null }[];
+	/** Ids das notícias abertas ("Visualizar"), na ordem. */
+	noticiasAbertas: string[];
+	fechar(): Promise<void>;
+}
+
+/** As notícias das páginas de exemplo, pelo id, para a página de uma notícia aberta. */
+const NOTICIAS_FALSAS: Record<string, { titulo: string; data: string; texto: string }> = {
+	"8001": { titulo: "Revisão na sexta", data: "20/11/2026", texto: "Teremos revisão na sexta,<br> sala 2." },
+	"8002": { titulo: "Sem aula hoje", data: "18/11/2026", texto: "Não haverá aula hoje." },
+};
+
+interface Sessao {
+	id: string;
+	logado: boolean;
+	caiu: boolean;
+	internos: number;
+	contador: number;
+	viewStates: string[];
+	turma?: string;
+	/** Downloads feitos a partir de cada ViewState. */
+	downloads: Map<string, number>;
+}
+
+/** Lê o corpo x-www-form-urlencoded como o servidor Java lê: bytes em ISO-8859-1. */
+export function lerFormLatin1(corpo: string): Map<string, string> {
+	const out = new Map<string, string>();
+	const dec = (s: string) => {
+		const bytes: number[] = [];
+		for (let i = 0; i < s.length; i++) {
+			const c = s[i]!;
+			if (c === "+") bytes.push(0x20);
+			else if (c === "%" && /^[0-9A-Fa-f]{2}$/.test(s.slice(i + 1, i + 3))) {
+				bytes.push(parseInt(s.slice(i + 1, i + 3), 16));
+				i += 2;
+			} else bytes.push(c.charCodeAt(0));
+		}
+		return Buffer.from(bytes).toString("latin1");
+	};
+	for (const par of corpo.split("&")) {
+		if (!par) continue;
+		const i = par.indexOf("=");
+		out.set(dec(i < 0 ? par : par.slice(0, i)), dec(i < 0 ? "" : par.slice(i + 1)));
+	}
+	return out;
+}
+
+function pagina(arquivo: string, troca: Record<string, string>, mudar?: (texto: string) => string): Buffer {
+	let texto = fs.readFileSync(path.join(PASTA, arquivo), "utf8");
+	for (const [k, v] of Object.entries(troca)) texto = texto.split(`{{${k}}}`).join(v);
+	return Buffer.from(mudar ? mudar(texto) : texto, "latin1");
+}
+
+/** Tira um bloco HTML marcado por uma classe (e o que vem dentro), para os cenários de página vazia. */
+const semBlocos = (classe: string) => (texto: string) => texto.replace(new RegExp(`<div [^>]*class="${classe}"[\\s\\S]*?</div></div>`, "g"), "");
+
+export async function iniciarSigaaFalso(opcoes: OpcoesSigaaFalso = {}): Promise<SigaaFalso> {
+	const usuario = opcoes.usuario ?? "aluno.teste";
+	const senhaCerta = opcoes.senhaCerta ?? "segredo";
+	const sessoes = new Map<string, Sessao>();
+	const pedidos: PedidoRecebido[] = [];
+	const pedidosArquivos: SigaaFalso["pedidosArquivos"] = [];
+	const noticiasAbertas: string[] = [];
+	// O servidor de arquivos separado (o arquivos.sistemas.ufj.edu.br de verdade).
+	let origemArquivos: string | undefined;
+	const servidorArquivos = opcoes.arquivosEmOutroHost
+		? http.createServer((req, res) => {
+				const url = new URL(req.url ?? "/", "http://127.0.0.1");
+				pedidosArquivos.push({ caminho: url.pathname, cookie: req.headers.cookie ?? null });
+				const id = /^\/arquivos\/(\d+)\//.exec(url.pathname)?.[1] ?? "";
+				const arq = ARQUIVOS_FALSOS[id];
+				if (!arq) {
+					res.writeHead(404);
+					res.end();
+					return;
+				}
+				res.writeHead(200, { "Content-Type": arq.tipo, "Content-Disposition": `attachment; filename="${arq.nome}"` });
+				res.end(arq.corpo);
+			})
+		: null;
+	if (servidorArquivos) {
+		await new Promise<void>((ok) => servidorArquivos.listen(0, "127.0.0.1", ok));
+		origemArquivos = `http://127.0.0.1:${(servidorArquivos.address() as AddressInfo).port}`;
+	}
+
+	const servidor = http.createServer((req, res) => {
+		const partes: Buffer[] = [];
+		req.on("data", (c: Buffer) => partes.push(c));
+		req.on("end", () => {
+			const corpo = Buffer.concat(partes).toString("latin1");
+			const url = new URL(req.url ?? "/", "http://127.0.0.1");
+			const caminho = url.pathname.replace(/;jsessionid=[^/?]*/i, "");
+			pedidos.push({ metodo: req.method ?? "GET", caminho: caminho + url.search, corpo });
+
+			const cookie = /JSESSIONID=([^;]+)/.exec(req.headers.cookie ?? "")?.[1];
+			let s = cookie ? sessoes.get(cookie) : undefined;
+			const html = (arquivo: string, troca: Record<string, string> = {}, status = 200, mudar?: (texto: string) => string) => {
+				const vs = s ? `j_id${++s.contador}` : "j_id0";
+				if (s) s.viewStates = [...s.viewStates.slice(-14), vs];
+				res.writeHead(status, { "Content-Type": "text/html;charset=ISO-8859-1" });
+				res.end(pagina(arquivo, { VIEWSTATE: vs, ...troca }, mudar));
+			};
+			const redirecionar = (para: string) => {
+				res.writeHead(302, { Location: para });
+				res.end();
+			};
+
+			if (caminho === "/sigaa/verTelaLogin.do") {
+				if (!s) {
+					s = { id: `${randomBytes(8).toString("hex").toUpperCase()}.srv1inst1`, logado: false, caiu: false, internos: 0, contador: 0, viewStates: [], downloads: new Map() };
+					sessoes.set(s.id, s);
+					res.setHeader("Set-Cookie", `JSESSIONID=${s.id}; Path=/sigaa; HttpOnly`);
+				}
+				return html("login.html", { ACAO: `/sigaa/logar.do;jsessionid=${s.id}?dispatch=logOn`, MENSAGEM: "" });
+			}
+			if (caminho === "/sigaa/logar.do" && url.searchParams.get("dispatch") === "logOn" && req.method === "POST") {
+				if (!s) return redirecionar("/sigaa/verTelaLogin.do");
+				const form = lerFormLatin1(corpo);
+				const completo = ["width", "height", "urlRedirect", "subsistemaRedirect", "acao", "acessibilidade"].every((k) => form.has(k));
+				if (completo && form.get("user.login") === usuario && form.get("user.senha") === senhaCerta) {
+					s.logado = true;
+					return redirecionar(opcoes.avisoDepoisDoLogin ? "/sigaa/avaliacao/formulario_avaliacao/notificacao_view.jsf" : "/sigaa/portais/discente/discente.jsf");
+				}
+				if (opcoes.recusaSilenciosa) return html("aviso.html");
+				return html("login.html", { ACAO: `/sigaa/logar.do;jsessionid=${s.id}?dispatch=logOn`, MENSAGEM: '<center style="color: #922;">Usuário e/ou senha inválidos</center>' });
+			}
+			if (caminho === "/sigaa/logar.do" && url.searchParams.get("dispatch") === "logOff") {
+				if (s) s.logado = false;
+				return redirecionar("/sigaa/verTelaLogin.do");
+			}
+
+			// Páginas internas: só com a sessão logada.
+			if (!s || !s.logado || s.caiu) return redirecionar("/sigaa/verTelaLogin.do");
+			s.internos++;
+			if (opcoes.derrubarSessaoDepois !== undefined && s.internos > opcoes.derrubarSessaoDepois) {
+				s.caiu = true;
+				return redirecionar("/sigaa/verTelaLogin.do");
+			}
+			const form = lerFormLatin1(corpo);
+			const viewStateValido = () => s!.viewStates.includes(form.get("javax.faces.ViewState") ?? "");
+
+			if (caminho === "/sigaa/avaliacao/formulario_avaliacao/notificacao_view.jsf") {
+				opcoes.aoServir?.(caminho);
+				return html("aviso.html");
+			}
+			if (caminho === "/sigaa/portais/discente/discente.jsf" && req.method === "GET") {
+				opcoes.aoServir?.(caminho);
+				return html("portal.html", {}, 200, opcoes.portalSemTurmas ? (t) => t.replace(/<div id="turmas-portal">[\s\S]*?<\/table>\s*<\/div>/, "").replace(/<div id="atualizacoes-turma">[\s\S]*?<\/form>\s*<\/div>/, "") : undefined);
+			}
+			const extra = tratarTurma({ req, caminho, form, s, viewStateValido, html, opcoes, res, origemArquivos, noticiasAbertas });
+			if (extra) return;
+			res.writeHead(404, { "Content-Type": "text/plain" });
+			res.end("não encontrado");
+		});
+	});
+
+	await new Promise<void>((ok) => servidor.listen(opcoes.porta ?? 0, "127.0.0.1", ok));
+	const { port } = servidor.address() as AddressInfo;
+	return {
+		base: `http://127.0.0.1:${port}`,
+		pedidos,
+		...(origemArquivos ? { origemArquivos } : {}),
+		pedidosArquivos,
+		noticiasAbertas,
+		fechar: async () => {
+			await new Promise<void>((ok) => servidor.close(() => ok()));
+			if (servidorArquivos) await new Promise<void>((ok) => servidorArquivos.close(() => ok()));
+		},
+	};
+}
+
+interface ContextoTurma {
+	req: http.IncomingMessage;
+	caminho: string;
+	form: Map<string, string>;
+	s: Sessao;
+	viewStateValido: () => boolean;
+	html: (arquivo: string, troca?: Record<string, string>, status?: number, mudar?: (texto: string) => string) => void;
+	opcoes: OpcoesSigaaFalso;
+	res: http.ServerResponse;
+	origemArquivos?: string;
+	noticiasAbertas: string[];
+}
+
+/** Os itens do menu das páginas de exemplo: sufixo da chave → rótulo. */
+export const MENU_FALSO: Record<string, string> = {
+	"81": "Principal", "82": "Plano de Ensino", "83": "Participantes", "84": "Notícias", "85": "Frequência", "86": "Ver Notas",
+	"87": "Fóruns", "88": "Referências", "89": "Arquivos", "90": "Avaliações", "91": "Tarefas", "92": "Questionários",
+};
+
+const NOTEBOOK = JSON.stringify({
+	cells: [
+		{ cell_type: "markdown", source: ["# Exemplos\n", "Derivadas com a regra da cadeia."] },
+		{ cell_type: "code", source: ["def derivada(x):\n", "    return 2 * x"], outputs: [{ output_type: "stream", text: ["SAIDA_GRANDE ".repeat(50)] }] },
+	],
+	metadata: { kernelspec: { language: "python" } },
+});
+
+/** Os arquivos das páginas de exemplo, pelo id do download. */
+const ARQUIVOS_FALSOS: Record<string, { nome: string; tipo: string; corpo: Buffer }> = {
+	"5001": { nome: "Aula_1_Limites.pdf", tipo: "application/pdf", corpo: Buffer.from("%PDF-1.4 limites") },
+	"5002": { nome: "Lista_regra_da_cadeia.pdf", tipo: "application/pdf", corpo: Buffer.from("%PDF-1.4 lista") },
+	"5003": { nome: "Exemplos.ipynb", tipo: "application/octet-stream", corpo: Buffer.from(NOTEBOOK) },
+	"5004": { nome: "Ficha de avaliação.docx", tipo: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", corpo: Buffer.from("PK ficha") },
+	"6001": { nome: "Aula_1_Introducao.pdf", tipo: "application/pdf", corpo: Buffer.from("%PDF-1.4 introducao") },
+};
+
+const PAGINAS: Record<string, { principal: string; avaliacoes: string; arquivos: string; tarefas: string; noticias: string }> = {
+	"1001": { principal: "turma-principal.html", avaliacoes: "turma-avaliacoes.html", arquivos: "turma-arquivos.html", tarefas: "turma-tarefas.html", noticias: "turma-noticias.html" },
+	"1002": { principal: "turma2-principal.html", avaliacoes: "turma-avaliacoes-vazia.html", arquivos: "turma2-arquivos.html", tarefas: "turma-tarefas-vazia.html", noticias: "turma-avaliacoes-vazia.html" },
+};
+
+/** As páginas de dentro das turmas. Devolve true se respondeu. */
+function tratarTurma(c: ContextoTurma): boolean {
+	const { req, caminho, form, s, opcoes, res } = c;
+	if (req.method !== "POST") return false;
+	// Abrir a turma: o formulário da lista de turmas do portal.
+	if (caminho === "/sigaa/portais/discente/discente.jsf" && form.has("form_acessarTurmaVirtual:turmaVirtual")) {
+		const id = form.get("idTurma") ?? "";
+		if (!c.viewStateValido() || !PAGINAS[id]) {
+			c.html("portal.html");
+			return true;
+		}
+		s.turma = id;
+		opcoes.aoServir?.(caminho, "Principal");
+		c.html(PAGINAS[id]!.principal, {}, 200, opcoes.semTopicos === id ? semBlocos("topico-aula") : undefined);
+		return true;
+	}
+	const paginas = s.turma ? PAGINAS[s.turma] : undefined;
+	// Itens do menu da turma.
+	if (caminho === "/sigaa/ava/index.jsf" && form.has("formMenu") && paginas) {
+		const chave = [...form.keys()].find((k) => /^formMenu:j_id_jsp_1_\d+$/.test(k) && form.get(k) === k && k !== "formMenu:j_id_jsp_1_44");
+		const rotulo = chave ? MENU_FALSO[chave.slice("formMenu:j_id_jsp_1_".length)] : undefined;
+		if (!c.viewStateValido() || !rotulo) {
+			c.html(paginas.principal);
+			return true;
+		}
+		opcoes.aoServir?.(caminho, rotulo);
+		if (opcoes.secaoQuebrada && opcoes.secaoQuebrada.idTurma === s.turma && opcoes.secaoQuebrada.rotulo === rotulo) {
+			res.writeHead(500, { "Content-Type": "text/html;charset=ISO-8859-1" });
+			res.end("erro interno");
+			return true;
+		}
+		c.html(rotulo === "Avaliações" ? paginas.avaliacoes : rotulo === "Arquivos" ? paginas.arquivos : rotulo === "Tarefas" ? paginas.tarefas : rotulo === "Notícias" ? paginas.noticias : paginas.principal);
+		return true;
+	}
+	// Abrir uma notícia ("Visualizar") a partir da lista.
+	if (caminho === "/sigaa/ava/NoticiaTurma/listar.jsf" && form.has("j_id_jsp_6_249") && paginas) {
+		const n = NOTICIAS_FALSAS[form.get("id") ?? ""];
+		if (!c.viewStateValido() || !n) {
+			c.html(paginas.principal);
+			return true;
+		}
+		if (opcoes.noticiaQuebrada === form.get("id")) {
+			c.html("aviso.html", {}, 500);
+			return true;
+		}
+		c.noticiasAbertas.push(form.get("id")!);
+		opcoes.aoServir?.(caminho, "noticia");
+		c.html("turma-noticia.html", { TITULO: n.titulo, DATA: n.data, TEXTO: n.texto });
+		return true;
+	}
+	// Download pela listagem de Arquivos.
+	if (caminho === "/sigaa/ava/ArquivoTurma/listar_discente.jsf" && form.has("formAva") && paginas) {
+		const vs = form.get("javax.faces.ViewState") ?? "";
+		const feitos = s.downloads.get(vs) ?? 0;
+		const id = form.get("id") ?? "";
+		const arq = opcoes.arquivoGrande && id === "5001" ? { ...ARQUIVOS_FALSOS[id]!, corpo: Buffer.alloc(27 * 1024 * 1024, 0x25) } : ARQUIVOS_FALSOS[id];
+		if (!c.viewStateValido() || !arq || (opcoes.umDownloadPorPagina && feitos >= 1)) {
+			c.html(paginas.principal);
+			return true;
+		}
+		s.downloads.set(vs, feitos + 1);
+		opcoes.aoServir?.(caminho, "download");
+		if (c.origemArquivos) {
+			res.writeHead(301, { Location: `${c.origemArquivos}/arquivos/${form.get("id")}/${encodeURIComponent(arq.nome)}` });
+			res.end();
+			return true;
+		}
+		res.writeHead(200, { "Content-Type": arq.tipo, "Content-Disposition": `attachment; filename="${Buffer.from(arq.nome, "latin1").toString("latin1")}"` });
+		res.end(arq.corpo);
+		return true;
+	}
+	return false;
+}

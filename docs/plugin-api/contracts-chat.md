@@ -17,7 +17,9 @@
 - [SideChatMessage](#sidechatmessage) — supporting declaration
 - [SideChatThread](#sidechatthread) — supporting declaration
 - [TurnUsage](#turnusage) — supporting declaration
+- [UFJ_ORIGENS](#ufj_origens) — supporting declaration
 - [UfjContextRef](#ufjcontextref) — supporting declaration
+- [UfjOrigem](#ufjorigem) — supporting declaration
 
 ## CallUsage
 
@@ -966,6 +968,18 @@ One entry per agent step (model call) in this turn.
 steps: CallUsage[];
 ```
 
+## UFJ_ORIGENS
+
+Supporting declaration used by a public type. This is not an additional runtime API or SDK helper.
+
+```ts
+declare const UFJ_ORIGENS: readonly [
+    "topico",
+    "material",
+    "prova"
+];
+```
+
 ## UfjContextRef
 
 Supporting declaration used by a public type. This is not an additional runtime API or SDK helper.
@@ -977,10 +991,14 @@ which subject, class, assessment and topic the session studies.
 export interface UfjContextRef {
     materia: string;
     turma: string;
-    avaliacao: string;
+    avaliacao?: string;
     topico?: string;
+    origem?: UfjOrigem;
+    arquivo?: string;
 }
 ```
+
+**Related types:** [UfjOrigem](contracts-chat.md#ufjorigem).
 
 **Member index** (including nested object members; inherited members are defined in the linked base types):
 
@@ -988,6 +1006,8 @@ export interface UfjContextRef {
 - [turma](#ufjcontextref-turma)
 - [avaliacao](#ufjcontextref-avaliacao)
 - [topico](#ufjcontextref-topico)
+- [origem](#ufjcontextref-origem)
+- [arquivo](#ufjcontextref-arquivo)
 
 ### UfjContextRef materia
 
@@ -1003,8 +1023,10 @@ turma: string;
 
 ### UfjContextRef avaliacao
 
+A prova; ausente só num vínculo de material (spec chat+SIGAA §5.4).
+
 ```ts
-avaliacao: string;
+avaliacao?: string;
 ```
 
 ### UfjContextRef topico
@@ -1012,3 +1034,29 @@ avaliacao: string;
 ```ts
 topico?: string;
 ```
+
+### UfjContextRef origem
+
+De onde a sessão nasceu: um tópico (padrão), um material ou a prova inteira.
+
+```ts
+origem?: UfjOrigem;
+```
+
+### UfjContextRef arquivo
+
+O arquivo da turma, num vínculo de material.
+
+```ts
+arquivo?: string;
+```
+
+## UfjOrigem
+
+Supporting declaration used by a public type. This is not an additional runtime API or SDK helper.
+
+```ts
+export type UfjOrigem = (typeof UFJ_ORIGENS)[number];
+```
+
+**Related types:** [UFJ_ORIGENS](contracts-chat.md#ufj_origens).

@@ -1,0 +1,47 @@
+<!-- Página de exemplo: portal do discente (estrutura do SIGAA da UFJ, nomes inventados). -->
+<html>
+<head><meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1"><title>SIGAA - Sistema Integrado de Gestão de Atividades Acadêmicas</title></head>
+<body>
+<div id="info-usuario"><p class="usuario"><span>ALUNO TESTE</span></p><p class="periodo-atual">Semestre atual: <strong>2026.2</strong></p></div>
+<div id="conteudo">
+	<div id="atualizacoes-turma">
+		<form id="formAtualizacoesTurmas" name="formAtualizacoesTurmas" method="post" action="/sigaa/portais/discente/discente.jsf" enctype="application/x-www-form-urlencoded">
+			<input type="hidden" name="formAtualizacoesTurmas" value="formAtualizacoesTurmas">
+			<table><tr><td>20/11/2026 - <a href="#" onclick="if(typeof jsfcljs == 'function'){jsfcljs(document.getElementById('formAtualizacoesTurmas'),{'formAtualizacoesTurmas:j_id_jsp_1_250':'formAtualizacoesTurmas:j_id_jsp_1_250','idTurma':'1001'},'');}return false">CÁLCULO TESTE (2026.2)</a></td></tr>
+			<tr><td>Novo Tópico de Aula: Regra da cadeia</td></tr></table>
+			<input type="hidden" name="javax.faces.ViewState" id="javax.faces.ViewState" value="{{VIEWSTATE}}">
+		</form>
+	</div>
+	<div id="turmas-portal">
+		<table>
+			<tbody>
+				<tr class="odd">
+					<td class="descricao">
+						<form id="form_acessarTurmaVirtual" name="form_acessarTurmaVirtual" method="post" action="/sigaa/portais/discente/discente.jsf" enctype="application/x-www-form-urlencoded">
+							<input type="hidden" name="form_acessarTurmaVirtual" value="form_acessarTurmaVirtual">
+							<input type="hidden" value="1001" name="idTurma">
+							<a id="form_acessarTurmaVirtual:turmaVirtual" href="#" onclick="if(typeof jsfcljs == 'function'){jsfcljs(document.getElementById('form_acessarTurmaVirtual'),{'form_acessarTurmaVirtual:turmaVirtual':'form_acessarTurmaVirtual:turmaVirtual'},'');}return false">CÁLCULO TESTE</a>
+							<input type="hidden" name="javax.faces.ViewState" id="javax.faces.ViewState" value="{{VIEWSTATE}}">
+						</form>
+					</td>
+					<td class="info" style="text-align:left">CA1 - SALA 1</td>
+					<td class="info"><center>35N12 </center></td>
+				</tr>
+				<tr class="even">
+					<td class="descricao">
+						<form id="form_acessarTurmaVirtual" name="form_acessarTurmaVirtual" method="post" action="/sigaa/portais/discente/discente.jsf" enctype="application/x-www-form-urlencoded">
+							<input type="hidden" name="form_acessarTurmaVirtual" value="form_acessarTurmaVirtual">
+							<input type="hidden" value="1002" name="idTurma">
+							<a id="form_acessarTurmaVirtual:turmaVirtual" href="#" onclick="if(typeof jsfcljs == 'function'){jsfcljs(document.getElementById('form_acessarTurmaVirtual'),{'form_acessarTurmaVirtual:turmaVirtual':'form_acessarTurmaVirtual:turmaVirtual'},'');}return false">DISCIPLINA TESTE II</a>
+							<input type="hidden" name="javax.faces.ViewState" id="javax.faces.ViewState" value="{{VIEWSTATE}}">
+						</form>
+					</td>
+					<td class="info" style="text-align:left">CA2 - SALA 2</td>
+					<td class="info"><center>24T34 </center></td>
+				</tr>
+			</tbody>
+		</table>
+	</div>
+</div>
+</body>
+</html>

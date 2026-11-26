@@ -4,6 +4,7 @@
  * injetem um serviço com modelo falso. Todas as mensagens são em português.
  */
 
+import fs from "node:fs/promises";
 import { FormBodyLimitError, readBoundedFormData } from "../../lib/bounded-form-data.ts";
 import { MAX_IMPORT_BODY_BYTES } from "../../lib/notes-import-limits.ts";
 import { BibliotecaConflitoError, BibliotecaEntradaError, BibliotecaFormatoError, BibliotecaNaoEncontradaError } from "../core/biblioteca.ts";
@@ -147,13 +148,41 @@ export async function turmaPutRoute(request: Request, codigo: string, turmaId: s
 
 // ─── materiais da turma (tarefa 7) ───────────────────────────────────────────
 
-/** POST .../materiais — multipart `arquivos` (vários): copia e devolve sugestões (sem gravar o mapeamento). */
+/** GET .../arquivos/[nome] — o arquivo da turma, inline quando o navegador o abre (spec chat+SIGAA §5.5). */
+export async function arquivoGetRoute(codigo: string, turmaId: string, nome: string, svc: BibliotecaService = bibliotecaService): Promise<Response> {
+	try {
+		const { caminho, tipo, inline } = svc.abrirArquivo(codigo, turmaId, nome);
+		const bytes = await fs.readFile(caminho);
+		return new Response(new Uint8Array(bytes), {
+			status: 200,
+			headers: {
+				"Content-Type": tipo,
+				"Content-Disposition": `${inline ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(nome)}`,
+				"X-Content-Type-Options": "nosniff",
+				"Cache-Control": "private, no-store",
+			},
+		});
+	} catch (err) {
+		return respostaDeErro(err);
+	}
+}
+
+/** POST .../materiais — multipart `arquivos` (vários): copia e devolve sugestões (sem gravar o mapeamento).
+ *  Com o campo `topico`, grava cada arquivo já ligado a esse tópico, sem chamar o modelo. */
 export async function materiaisPostRoute(request: Request, codigo: string, turmaId: string, svc: BibliotecaService = bibliotecaService): Promise<Response> {
 	const form = await lerFormulario(request);
 	if (form instanceof Response) return form;
 	const files = form.getAll("arquivos").filter((f): f is File => f instanceof File);
+	const topico = form.get("topico");
 	try {
 		const arquivos = await Promise.all(files.map(async (f) => ({ nome: f.name, bytes: new Uint8Array(await f.arrayBuffer()) })));
+		if (typeof topico === "string" && topico.trim()) {
+			if (arquivos.length === 0) throw new BibliotecaEntradaError("Escolha pelo menos um arquivo.");
+			// Confere todos antes de gravar o primeiro: um arquivo recusado não deixa os outros pela metade.
+			for (const a of arquivos) svc.conferirArquivo(codigo, turmaId, a.nome, a.bytes, topico.trim());
+			const adicionados = arquivos.map((a) => svc.adicionarArquivo(codigo, turmaId, a.nome, a.bytes, topico.trim()));
+			return Response.json({ adicionados, sugestoes: [], custoUsd: null });
+		}
 		return Response.json(await svc.adicionarMateriais(codigo, turmaId, arquivos, request.signal));
 	} catch (err) {
 		return respostaDeErro(err);
@@ -193,6 +222,52 @@ export async function preparacaoPutRoute(request: Request): Promise<Response> {
 	if (body instanceof Response) return body;
 	try {
 		return Response.json(salvarHoras(body));
+	} catch (err) {
+		return respostaDeErro(err);
+	}
+}
+
+// ─── provas: data, nova prova e conteúdo (spec SIGAA §7.5–7.6) ───────────────
+
+/** PUT .../avaliacoes/[avaliacao] — `{ nome?: string; data?: string | null; topicos?: string[] }` (ao menos um). */
+export async function provaPutRoute(request: Request, codigo: string, turmaId: string, avaliacaoId: string, svc: BibliotecaService = bibliotecaService): Promise<Response> {
+	const body = await lerJson(request);
+	if (body instanceof Response) return body;
+	const b = (body && typeof body === "object" ? body : {}) as { nome?: unknown; data?: unknown; topicos?: unknown };
+	const temNome = "nome" in b;
+	const temData = "data" in b;
+	const temTopicos = "topicos" in b;
+	if (!temNome && !temData && !temTopicos) return Response.json({ error: "Informe o nome, a data ou os tópicos da prova." }, { status: 400 });
+	if (temNome && typeof b.nome !== "string") return Response.json({ error: "Dê um nome à prova." }, { status: 400 });
+	if (temData && b.data !== null && typeof b.data !== "string") return Response.json({ error: "Informe a data no formato AAAA-MM-DD." }, { status: 400 });
+	if (temTopicos && (!Array.isArray(b.topicos) || b.topicos.some((t) => typeof t !== "string"))) return Response.json({ error: "Os tópicos precisam ser uma lista de ids." }, { status: 400 });
+	try {
+		let turma = temNome ? svc.renomearProva(codigo, turmaId, avaliacaoId, b.nome as string) : undefined;
+		if (temData) turma = svc.definirData(codigo, turmaId, avaliacaoId, b.data as string | null);
+		if (temTopicos) turma = svc.definirEscopo(codigo, turmaId, avaliacaoId, b.topicos as string[]);
+		return Response.json(turma);
+	} catch (err) {
+		return respostaDeErro(err);
+	}
+}
+
+/** DELETE .../avaliacoes/[avaliacao] — apaga uma prova criada à mão. */
+export function provaDeleteRoute(codigo: string, turmaId: string, avaliacaoId: string, svc: BibliotecaService = bibliotecaService): Response {
+	try {
+		return Response.json(svc.removerProva(codigo, turmaId, avaliacaoId));
+	} catch (err) {
+		return respostaDeErro(err);
+	}
+}
+
+/** POST .../avaliacoes — `{ nome: string; data?: string }`. */
+export async function provaPostRoute(request: Request, codigo: string, turmaId: string, svc: BibliotecaService = bibliotecaService): Promise<Response> {
+	const body = await lerJson(request);
+	if (body instanceof Response) return body;
+	const b = (body && typeof body === "object" ? body : {}) as { nome?: unknown; data?: unknown };
+	if (b.data !== undefined && typeof b.data !== "string") return Response.json({ error: "Informe a data no formato AAAA-MM-DD." }, { status: 400 });
+	try {
+		return Response.json(svc.adicionarProva(codigo, turmaId, { nome: typeof b.nome === "string" ? b.nome : "", ...(typeof b.data === "string" && b.data ? { data: b.data } : {}) }));
 	} catch (err) {
 		return respostaDeErro(err);
 	}
