@@ -36,6 +36,7 @@ export function ArquivoView({ titulo, topicoTitulo, tipo, linguagem, url, texto,
 				<Button type="button" size="sm" disabled={ocupado} onClick={onEstudar}>Estudar com a IA</Button>
 			</div>
 			{tipo === "pdf" && <iframe title={titulo} src={url} className="min-h-[70vh] w-full flex-1 rounded-md border bg-background" />}
+			{/* eslint-disable-next-line @next/next/no-img-element -- arquivo local servido pela rota da turma; sem otimização do next/image */}
 			{tipo === "imagem" && <img src={url} alt={titulo} className="max-w-full rounded-md border" />}
 			{tipo === "texto" && (corpo !== null ? <div data-arquivo-texto className="rounded-md border px-4 py-3"><HostMarkdown text={corpo} /></div> : <p className="text-sm text-muted-foreground">Carregando…</p>)}
 			{tipo === "outro" && <p className="text-sm text-muted-foreground">Este formato não abre no app. <a href={url} download className="underline">Baixar</a></p>}
